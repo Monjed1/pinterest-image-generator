@@ -753,67 +753,13 @@ def generate_image():
                 # If text is very long and would overlap with bottom elements, adjust as needed
                 text_y = max(40, available_height - 200 - total_text_height)
 
-        # --- Text Background Box (Only for Style 1) ---
-        if style == 'style1':
-            padding = 35
-            corner_radius = 25
-            bg_color = (0, 0, 0, 140)
-            shadow_color_box = (0, 0, 0, 70)
-            shadow_offset_box = (5, 5)
-
-            # Calculate text block bounding box
-            max_line_width = 0
-            _current_y_bbox = text_y # Use a temp var for bbox calculation y
-            text_block_bbox = [target_size[0], target_size[1], 0, 0] # [min_x, min_y, max_x, max_y]
-            for i, line in enumerate(wrapped_lines):
-                line_width = draw.textlength(line, font=font)
-                max_line_width = max(max_line_width, line_width)
-                line_x = (target_size[0] - line_width) // 2
-                actual_line_height = line_heights[i] * (line_spacing_factor if i > 0 else 1.2)
-                text_block_bbox[0] = min(text_block_bbox[0], line_x)
-                text_block_bbox[1] = min(text_block_bbox[1], _current_y_bbox)
-                text_block_bbox[2] = max(text_block_bbox[2], line_x + line_width)
-                text_block_bbox[3] = max(text_block_bbox[3], _current_y_bbox + actual_line_height)
-                _current_y_bbox += actual_line_height
-
-            # Calculate box dimensions
-            box_left = int(text_block_bbox[0] - padding)
-            box_top = int(text_block_bbox[1] - padding)
-            box_right = int(text_block_bbox[2] + padding)
-            box_bottom = int(text_block_bbox[3] + padding * 0.5)
-            box_width = box_right - box_left
-            box_height = box_bottom - box_top
-
-            # Ensure box is within bounds
-            box_left = max(0, box_left)
-            box_top = max(0, box_top)
-            box_right = min(target_size[0], box_right)
-            box_bottom = min(target_size[1], box_bottom)
-            box_width = box_right - box_left
-            box_height = box_bottom - box_top
-
-            if box_width > 0 and box_height > 0:
-                # Draw box on a separate surface and composite
-                box_surface = Image.new('RGBA', img.size, (0,0,0,0))
-                box_draw = ImageDraw.Draw(box_surface)
-                # Shadow
-                shadow_rect = [(box_left + shadow_offset_box[0], box_top + shadow_offset_box[1]),
-                               (box_right + shadow_offset_box[0], box_bottom + shadow_offset_box[1])]
-                box_draw.rounded_rectangle(shadow_rect, radius=corner_radius, fill=shadow_color_box)
-                # Main box
-                main_rect = [(box_left, box_top), (box_right, box_bottom)]
-                box_draw.rounded_rectangle(main_rect, radius=corner_radius, fill=bg_color)
-                # Composite
-                img = Image.alpha_composite(img.convert('RGBA'), box_surface) # Keep as RGBA for now
-                draw = ImageDraw.Draw(img) # Re-assign draw object to the updated image
-
         # --- Text Drawing ---
         current_y = text_y # Reset Y position for drawing
         logger.debug(f"Starting text drawing at current_y = {current_y}")
         for i, line in enumerate(wrapped_lines):
             logger.debug(f"Drawing line {i+1}/{len(wrapped_lines)}: '{line}'")
+            # Use the main `font` variable which is now style-specific
             try:
-                 # Use textlength if available (more accurate)
                  line_width = draw.textlength(line, font=font)
             except AttributeError:
                  logger.warning("draw.textlength not available, using textsize as fallback for width.")
@@ -827,23 +773,24 @@ def generate_image():
             else:
                  # Fallback if line_heights calculation had an issue
                  logger.warning(f"Index {i} out of bounds for line_heights (length {len(line_heights)}). Using fallback height.")
-                 actual_line_height = base_font_size * (line_spacing_factor if i > 0 else 1.2) # Less accurate fallback
+                 actual_line_height = current_style_font_size * (line_spacing_factor if i > 0 else 1.2) # Use current_style_font_size as base
                  
             logger.debug(f"  Line width={line_width}, calculated line_x={line_x}, actual_line_height={actual_line_height}")
 
-            # --- Start Replace ---  (Replace old Style 1 logic)
+            # Apply style-specific drawing logic
             if style == 'style2':
                 # Style 2: Golden text with enhanced shadow for readability
                 # Make title larger for Style 2 but ensure it stays within boundaries
                 style2_font_scale = 1.0 # Increased from 0.9 for larger text
                 
                 # Use EBGaramond-Bold.ttf specifically for Style 2
-                style2_font = load_bundled_font(['EBGaramond-Bold.ttf'], int(base_font_size * style2_font_scale))
-                # Use the specific font if successfully loaded, otherwise fallback to original font
-                current_font = style2_font if style2_font else font
+                current_font = font # Use the pre-loaded font variable
                 
                 # Ensure perfect centering for each line
-                line_width = draw.textlength(line, font=current_font)
+                try:
+                     line_width = draw.textlength(line, font=current_font)
+                except AttributeError:
+                     line_width = draw.textsize(line, font=current_font)[0] # Fallback
                 adjusted_line_x = (target_size[0] - line_width) // 2
                 
                 # If text is too close to edges, adjust positioning
@@ -878,15 +825,13 @@ def generate_image():
             elif style == 'style3':
                 # Style 3: Clean white text on black bars
                 # Use Nunito-ExtraBold.ttf specifically for Style 3
-                style3_font_scale = 1.1  # Scale up font size for Style 3 title
-                
-                # Reuse the font we already loaded earlier during bar height calculation
-                current_font = temp_font if 'temp_font' in locals() else (
-                    load_bundled_font(style3_font_preferences, int(base_font_size * style3_font_scale)) or font
-                )
+                current_font = font # Use the pre-loaded font variable
                 
                 # Ensure perfect centering for each line
-                line_width = draw.textlength(line, font=current_font)
+                try:
+                    line_width = draw.textlength(line, font=current_font)
+                except AttributeError:
+                    line_width = draw.textsize(line, font=current_font)[0] # Fallback
                 adjusted_line_x = (target_size[0] - line_width) // 2
                 
                 # Ensure minimum margins
@@ -907,24 +852,19 @@ def generate_image():
                 # Main text
                 draw.text((adjusted_line_x, current_y), line, fill=style3_text_color, font=current_font)
             elif style == 'style4':
-                # Style 4: Gold-colored text in the bottom rectangle using Vidaloka font
-                style4_font_scale = 1.1  # Scale up font size for Style 4 title
-                
-                # Load Vidaloka font for Style 4
-                style4_font = load_bundled_font(style4_font_preferences, int(base_font_size * style4_font_scale))
-                # Use the specific font if successfully loaded, otherwise fallback to original font
-                current_font = style4_font if style4_font else font
-                logger.debug(f"  Style 4: Using font: {current_font.path if hasattr(current_font, 'path') else 'Default/Unknown'} at size {current_font.size if hasattr(current_font, 'size') else 'Unknown'}")
-                
-                # Ensure perfect centering for each line
+                # Style 4: Gold-colored text...
+                current_font = font # Use the pre-loaded font variable
+                logger.debug(f"  Style 4: Using pre-loaded font: {current_font.path if hasattr(current_font, 'path') else 'Default/Unknown'} at size {current_font.size if hasattr(current_font, 'size') else 'Unknown'}")
+
+                # Recalculate line width *with the correct font* for centering this specific line
                 try:
                      line_width = draw.textlength(line, font=current_font)
                 except AttributeError:
                      line_width = draw.textsize(line, font=current_font)[0] # Fallback
                 adjusted_line_x = (target_size[0] - line_width) // 2
-                logger.debug(f"  Style 4: Recalculated line_width={line_width}, adjusted_line_x={adjusted_line_x}")
-                
-                # If text is too close to edges, adjust positioning
+                logger.debug(f"  Style 4: Line specific width={line_width}, adjusted_line_x={adjusted_line_x}")
+
+                # ... edge adjustment logic ...
                 if adjusted_line_x < 40: # Check left edge
                      logger.debug(f"  Style 4: Adjusting line_x from {adjusted_line_x} to 40 (left bound)")
                      adjusted_line_x = 40
@@ -933,28 +873,21 @@ def generate_image():
                      logger.debug(f"  Style 4: Adjusting line_x from {adjusted_line_x} to {new_x} (right bound)")
                      adjusted_line_x = max(40, new_x) # Ensure it doesn't go past left bound either
 
-                # Use the specified gold color (#d7bd45)
-                style4_text_color = (215, 189, 69)  # #d7bd45 converted to RGB
-                
-                # First draw a subtle shadow for depth against dark background
+                style4_text_color = (215, 189, 69)
                 shadow_offset = (2, 2)
                 shadow_color = (0, 0, 0, 150)
                 draw.text((adjusted_line_x + shadow_offset[0], current_y + shadow_offset[1]),
                           line, fill=shadow_color, font=current_font)
-                
-                # Main gold text
                 draw.text((adjusted_line_x, current_y), line, fill=style4_text_color, font=current_font)
             elif style == 'style5':
                 # Style 5: White bold text in the dark curved section using LeagueSpartan-Bold font
-                style5_font_scale = 1.2  # Scale up font size for more impact
-                
-                # Load LeagueSpartan-Bold font for Style 5
-                style5_font = load_bundled_font(style5_font_preferences, int(base_font_size * style5_font_scale))
-                # Use the specific font if successfully loaded, otherwise fallback to original font
-                current_font = style5_font if style5_font else font
+                current_font = font # Use the pre-loaded font variable
                 
                 # Ensure perfect centering for each line
-                line_width = draw.textlength(line, font=current_font)
+                try:
+                    line_width = draw.textlength(line, font=current_font)
+                except AttributeError:
+                    line_width = draw.textsize(line, font=current_font)[0] # Fallback
                 adjusted_line_x = (target_size[0] - line_width) // 2
                 
                 # If text is too close to edges, adjust positioning
@@ -974,15 +907,34 @@ def generate_image():
                 draw.text((adjusted_line_x, current_y), line, fill=style5_text_color, font=current_font)
             else: # Style 1
                 # Style 1: White text with shadow
+                current_font = font # Use the pre-loaded font variable
                 shadow_offset = (4, 4)
                 shadow_color = (0, 0, 0, 128)
                 text_color = (255, 255, 255)
+                # Need to recalculate line_x based on current_font for Style 1 centering
+                try:
+                    line_width = draw.textlength(line, font=current_font)
+                except AttributeError:
+                    line_width = draw.textsize(line, font=current_font)[0] # Fallback
+                line_x = (target_size[0] - line_width) // 2
                 # Shadow
                 draw.text((line_x + shadow_offset[0], current_y + shadow_offset[1]),
-                          line, fill=shadow_color, font=font)
+                          line, fill=shadow_color, font=current_font)
                 # Main text
-                draw.text((line_x, current_y), line, fill=text_color, font=font)
-            # --- End Replace ---
+                draw.text((line_x, current_y), line, fill=text_color, font=current_font)
+
+            # --- Add extra spacing adjustment specifically for Style 4 --- 
+            if style == 'style4':
+                # Add a small extra spacing factor for style 4 to prevent overlap
+                extra_spacing_factor = 1.15 # Start with 15% extra space, adjust if needed
+                original_height = actual_line_height
+                actual_line_height *= extra_spacing_factor 
+                logger.debug(f"  Style 4: Applied extra spacing factor {extra_spacing_factor}. Height changed from {original_height} to {actual_line_height}")
+            # --- End spacing adjustment ---
+
+            # Increment Y position for next line
+            current_y += actual_line_height
+            logger.debug(f"  Incremented current_y to {current_y}") 
 
         # --- Final Touches ---
         # Apply professional shadow effect to the entire image for Style 2
