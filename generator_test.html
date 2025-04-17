@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pin Generator Test</title>
+    <style>
+        body { 
+            font-family: sans-serif; 
+            max-width: 700px; 
+            margin: 20px auto; 
+            padding: 15px; 
+            border: 1px solid #eee; 
+            border-radius: 8px;
+            background-color: #f9f9f9;
+        }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; color: #333; }
+        input[type="text"], textarea { 
+            width: 100%; 
+            padding: 10px; 
+            border: 1px solid #ccc; 
+            border-radius: 4px; 
+            box-sizing: border-box; /* Include padding in width */
+        }
+        textarea { height: 100px; resize: vertical; }
+        button { 
+            background-color: #e60023; 
+            color: white; 
+            padding: 12px 20px; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-size: 16px; 
+            transition: background-color 0.2s;
+        }
+        button:hover { background-color: #ad081b; }
+        #message { 
+            margin-top: 20px; 
+            padding: 10px; 
+            border-radius: 4px; 
+            text-align: center;
+        }
+        .error { background-color: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
+        .success { background-color: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+        #imageResultArea { 
+            margin-top: 25px; 
+            text-align: center; 
+            padding-top: 15px; 
+            border-top: 1px dashed #ccc; 
+        }
+        #generatedImage { 
+            max-width: 100%; 
+            height: auto; 
+            border: 1px solid #ddd; 
+            margin-top: 10px; 
+            background-color: #fff;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Pin Generator Test (/generate-image)</h1>
+
+    <form id="generatorForm">
+        <div class="form-group">
+            <label for="title">Title (Text Overlay):</label>
+            <input type="text" id="title" name="title" required value="Stunning Nature Photography: Capturing Earth's Beauty">
+        </div>
+        <div class="form-group">
+            <label for="image_prompt">Image Prompt:</label>
+            <textarea id="image_prompt" name="image_prompt" required placeholder="Describe the desired image visuals...">A serene forest path with sunlight filtering through the trees, realistic photography style, golden hour lighting.</textarea>
+        </div>
+        <div class="form-group">
+            <label for="BrandingURL">Branding URL (Footer Text):</label>
+            <input type="text" id="BrandingURL" name="BrandingURL" placeholder="e.g., yourwebsite.com" value="naturephotos.com">
+        </div>
+        
+        <!-- New Style Selection Dropdown -->
+        <div class="form-group">
+            <label for="Style">Select Style:</label>
+            <select id="Style" name="Style">
+                <option value="style1" selected>Style 1 (Default - Dark Box with White Text & Button)</option>
+                <option value="style2">Style 2 (Modern - White Text with Subtle Shadow & Button, No Box)</option>
+                <option value="style3">Style 3 (Clean - Black Bars at Top/Bottom with White Text)</option>
+                <option value="style4">Style 4 (Dark Bottom with Gold Bar & Title)</option>
+                <option value="style5">Style 5 (Curved Dark Bottom with White Title)</option>
+            </select>
+        </div>
+        
+        <button type="submit">Generate Image</button>
+    </form>
+
+    <!-- Message Area -->
+    <div id="message"></div>
+
+    <!-- Image Result Area -->
+    <div id="imageResultArea" style="display: none;">
+        <h3>Generated Image:</h3>
+        <img id="generatedImage" src="" alt="Generated Pin Image">
+    </div>
+
+    <script>
+        document.getElementById('generatorForm').addEventListener('submit', async function(e) {
+            e.preventDefault(); // Prevent actual form submission
+            
+            const title = document.getElementById('title').value;
+            const image_prompt = document.getElementById('image_prompt').value; 
+            const BrandingURL = document.getElementById('BrandingURL').value; 
+            const Style = document.getElementById('Style').value; // Get selected style
+            
+            const messageElement = document.getElementById('message');
+            const imageResultArea = document.getElementById('imageResultArea');
+            const generatedImageElement = document.getElementById('generatedImage');
+
+            // Reset UI
+            messageElement.innerHTML = "Generating image... Please wait.";
+            messageElement.className = ""; // Clear previous status class
+            generatedImageElement.style.display = 'none';
+            generatedImageElement.src = '';
+            imageResultArea.style.display = 'none';
+
+            try {
+                // Ensure this URL matches where your Flask app is running
+                const apiUrl = 'http://localhost:5000/generate-image'; 
+                
+                console.log("Sending request to:", apiUrl);
+                console.log("Request body:", JSON.stringify({ title, image_prompt, BrandingURL, Style }));
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    // Send parameters with keys matching the Flask app's expectations
+                    body: JSON.stringify({ 
+                        title: title, 
+                        image_prompt: image_prompt, 
+                        BrandingURL: BrandingURL,
+                        Style: Style // Updated parameter name
+                    })
+                });
+
+                console.log("Response status:", response.status);
+
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log("Response JSON:", result);
+
+                    if (result.image_url) {
+                        // Display the image from the URL instead of base64
+                        generatedImageElement.src = result.image_url;
+                        generatedImageElement.style.display = 'block';
+                        imageResultArea.style.display = 'block';
+                        messageElement.innerHTML = "Success! Image generated.";
+                        messageElement.className = "success";
+                    } else {
+                        messageElement.innerHTML = 'Error: API success response, but no image URL found.';
+                        messageElement.className = "error";
+                        console.error("API Error: No image_url field in response", result);
+                    }
+                } else {
+                    // Attempt to get error details from JSON response
+                    let errorMsg = `HTTP Error ${response.status}: ${response.statusText}`;
+                    try {
+                        const errorData = await response.json();
+                        errorMsg = errorData.error || JSON.stringify(errorData); // Use specific error if available
+                        console.error("API Error Response:", errorData);
+                    } catch (jsonError) {
+                        console.error("Could not parse error response as JSON", jsonError);
+                    }
+                    messageElement.innerHTML = `Error: ${errorMsg}`;
+                    messageElement.className = "error";
+                }
+            } catch (error) {
+                // Handle network errors or other exceptions
+                messageElement.innerHTML = `Failed to communicate with the API: ${error}`;
+                messageElement.className = "error";
+                console.error("Network/Fetch Error:", error);
+            }
+        });
+    </script>
+
+</body>
+</html>

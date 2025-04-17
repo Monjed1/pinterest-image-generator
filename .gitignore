@@ -1,0 +1,28 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.class
+venv/
+env/
+.env
+.venv
+@"
+# Python
+__pycache__/
+*.py[cod]
+*.class
+venv/
+env/
+.env
+.venv
+
+# Static files (generated images)
+static/*
+!static/.gitkeep
+
+# Logs
+*.log
+
+# OS-specific
+.DS_Store
+Thumbs.db
