@@ -936,6 +936,52 @@ def generate_image():
             current_y += actual_line_height
             logger.debug(f"  Incremented current_y to {current_y}") 
 
+        # --- Draw Branding URL --- 
+        if branding_url:
+             logger.info(f"Drawing branding URL: {branding_url}")
+             try:
+                  # Define branding font and size
+                  branding_font_size = 30  # Smaller size for branding
+                  branding_font = load_bundled_font(branding_font_preferences, branding_font_size)
+                  if not branding_font:
+                       logger.warning("Branding font failed to load, using default.")
+                       branding_font = ImageFont.load_default(size=branding_font_size)
+                       
+                  # Calculate text width
+                  try:
+                      branding_width = draw.textlength(branding_url, font=branding_font)
+                  except AttributeError:
+                      branding_width = draw.textsize(branding_url, font=branding_font)[0]
+                      
+                  # Calculate position (bottom center with padding)
+                  padding_bottom = 30
+                  branding_x = (target_size[0] - branding_width) // 2
+                  # Calculate Y based on font bounding box for better vertical centering
+                  try:
+                       bbox = draw.textbbox((0,0), branding_url, font=branding_font)
+                       text_height = bbox[3] - bbox[1]
+                  except AttributeError:
+                       text_height = branding_font_size # Fallback height
+                       
+                  branding_y = target_size[1] - text_height - padding_bottom
+                  
+                  logger.debug(f"Branding text width={branding_width}, height={text_height}")
+                  logger.debug(f"Drawing branding at x={branding_x}, y={branding_y}")
+                  
+                  # Define text color and shadow (light color for dark backgrounds like Style 4)
+                  branding_text_color = (200, 200, 200) # Light gray
+                  branding_shadow_color = (0, 0, 0, 100)
+                  branding_shadow_offset = (1, 1)
+                  
+                  # Draw shadow
+                  draw.text((branding_x + branding_shadow_offset[0], branding_y + branding_shadow_offset[1]), 
+                            branding_url, fill=branding_shadow_color, font=branding_font)
+                  # Draw main text
+                  draw.text((branding_x, branding_y), branding_url, fill=branding_text_color, font=branding_font)
+                  
+             except Exception as e:
+                  logger.error(f"Error drawing branding URL: {e}", exc_info=True)
+
         # --- Final Touches ---
         # Apply professional shadow effect to the entire image for Style 2
         if style == 'style2':
