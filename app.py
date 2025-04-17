@@ -597,12 +597,43 @@ def generate_image():
         draw = ImageDraw.Draw(img) # Initial draw object on base image
         
         # --- Font Loading ---
-        branding_font_size = 60 # Note: subtitle font seems unused currently
+        # Load the *correct* font based on the selected style *before* calculations
+        logger.info(f"Loading font for style \'{style}\'...")
+        current_style_font_size = base_font_size
+        if style == 'style2':
+            font = load_bundled_font(['EBGaramond-Bold.ttf'], int(base_font_size * 1.0)) # Style 2 uses 1.0 scale
+            current_style_font_size = int(base_font_size * 1.0)
+        elif style == 'style3':
+            font = load_bundled_font(style3_font_preferences, int(base_font_size * 1.1)) # Style 3 uses 1.1 scale
+            current_style_font_size = int(base_font_size * 1.1)
+        elif style == 'style4':
+            font = load_bundled_font(style4_font_preferences, int(base_font_size * 1.1)) # Style 4 uses 1.1 scale
+            current_style_font_size = int(base_font_size * 1.1)
+        elif style == 'style5':
+            font = load_bundled_font(style5_font_preferences, int(base_font_size * 1.2)) # Style 5 uses 1.2 scale
+            current_style_font_size = int(base_font_size * 1.2)
+        else: # Style 1 or default
+            font = load_bundled_font(main_font_preferences, base_font_size)
+            current_style_font_size = base_font_size
+        
+        # Fallback if style-specific font failed to load
+        if not font:
+             logger.warning(f"Style-specific font loading failed for style '{style}'. Falling back to main preferences.")
+             font = load_bundled_font(main_font_preferences, base_font_size)
+             current_style_font_size = base_font_size # Reset size if font changed
+             # Final fallback if even main prefs fail
+             if not font:
+                  logger.error("CRITICAL: All font loading failed. Using Pillow default.")
+                  try:
+                       font = ImageFont.load_default(size=base_font_size)
+                  except TypeError:
+                       font = ImageFont.load_default() # Older Pillow
+                  current_style_font_size = base_font_size # Assume intended size
 
-        logger.info("Loading main font...")
-        font = load_bundled_font(main_font_preferences, base_font_size)
+        logger.info(f"Using font: {font.path if hasattr(font, 'path') else 'Default/Unknown'} at size {current_style_font_size}")
 
         # --- Auto-scale font size / Text wrapping ---
+        # NOTE: Text wrapping still uses the loaded `font` variable which now corresponds to the style
         max_width = target_size[0] - 120 # Max width for title text
         
         # For style 2, increase the text padding from edges
@@ -611,16 +642,42 @@ def generate_image():
             max_width = target_size[0] - 160
         
         # Initial wrap
+        logger.debug(f"Wrapping text with max_width = {max_width}")
         wrapped_lines = wrap_text(title, font, max_width)
         
-        # Dynamically adjust font size
-        while len(wrapped_lines) > 6 and base_font_size > 30:
-            base_font_size -= 5
-            logger.info(f"Text too long, reducing main font size to {base_font_size}")
-            font = load_bundled_font(main_font_preferences, base_font_size) # Reload font
-            wrapped_lines = wrap_text(title, font, max_width)
-            
-        # Calculate text height and position
+        # Dynamically adjust font size if text is too long
+        # We might need to reload the font here if size changes significantly
+        # This part might need refinement if auto-scaling is still desired across styles
+        _current_font_size_for_scaling = current_style_font_size
+        while len(wrapped_lines) > 6 and _current_font_size_for_scaling > 30:
+            _current_font_size_for_scaling -= 5
+            logger.info(f"Text too long, reducing effective font size for wrapping to {_current_font_size_for_scaling}")
+            # Reload the *same* style font with the smaller size for wrapping check
+            # This assumes the preference list remains the same, just the size changes
+            _temp_font_for_scaling = None
+            if style == 'style2':
+                _temp_font_for_scaling = load_bundled_font(['EBGaramond-Bold.ttf'], _current_font_size_for_scaling)
+            elif style == 'style3':
+                 _temp_font_for_scaling = load_bundled_font(style3_font_preferences, _current_font_size_for_scaling)
+            elif style == 'style4':
+                 _temp_font_for_scaling = load_bundled_font(style4_font_preferences, _current_font_size_for_scaling)
+            elif style == 'style5':
+                 _temp_font_for_scaling = load_bundled_font(style5_font_preferences, _current_font_size_for_scaling)
+            else: # Style 1 or default
+                 _temp_font_for_scaling = load_bundled_font(main_font_preferences, _current_font_size_for_scaling)
+
+            if _temp_font_for_scaling: # Only re-wrap if font loaded successfully
+                 font = _temp_font_for_scaling # Update the main font variable
+                 current_style_font_size = _current_font_size_for_scaling # Update the size tracking variable
+                 wrapped_lines = wrap_text(title, font, max_width)
+            else:
+                 logger.warning("Failed to load smaller font during auto-scaling, stopping scaling.")
+                 break # Avoid infinite loop if font loading fails
+
+        logger.debug(f"Final wrapped lines: {wrapped_lines}")
+        logger.debug(f"Final font size after scaling: {current_style_font_size}")
+
+        # Calculate text height and position using the *final* loaded font
         line_heights = []
         try:
             # Use textbbox if available (more accurate)
