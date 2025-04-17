@@ -19,6 +19,8 @@ import uuid
 import aiohttp
 from dotenv import load_dotenv
 import math
+import sys
+import pathlib
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -942,48 +944,142 @@ def generate_image():
             # Ensure proper conversion back to RGB for saving
             img = img.convert("RGB")
         
-        # Create a static directory if it doesn't exist
-        static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
-        if not os.path.exists(static_dir):
-            os.makedirs(static_dir)
+        # Create a static directory if it doesn't exist - IMPROVED PATH HANDLING
+        # First try using the absolute path method
+        try:
+            static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+            logger.info(f"Attempting to use static directory at: {static_dir}")
+            
+            # Check if this path is writeable
+            if not os.access(os.path.dirname(static_dir), os.W_OK):
+                logger.warning(f"No write access to {os.path.dirname(static_dir)}, trying alternate location")
+                # Try an alternative location - current working directory
+                static_dir = os.path.join(os.getcwd(), 'static')
+                logger.info(f"Using alternative static directory at: {static_dir}")
+            
+            if not os.path.exists(static_dir):
+                logger.info(f"Static directory doesn't exist. Creating at: {static_dir}")
+                os.makedirs(static_dir, exist_ok=True)
+                
+            # Double check we can write to this directory
+            if not os.access(static_dir, os.W_OK):
+                logger.warning(f"No write access to {static_dir}, trying system temp directory")
+                # Use system temp directory as last resort
+                static_dir = os.path.join(tempfile.gettempdir(), 'flask_app_static')
+                os.makedirs(static_dir, exist_ok=True)
+                logger.info(f"Using system temp directory at: {static_dir}")
+        except Exception as e:
+            # Last resort - use system temp directory
+            logger.error(f"Error setting up static directory: {e}")
+            static_dir = os.path.join(tempfile.gettempdir(), 'flask_app_static')
+            os.makedirs(static_dir, exist_ok=True)
+            logger.info(f"Using system temp directory for static files: {static_dir}")
+            
+        # Log static directory permissions
+        logger.info(f"Static directory permissions: {oct(os.stat(static_dir).st_mode)[-3:]}")
         
         # Generate a unique filename
         image_filename = f"generated_{int(time.time())}_{uuid.uuid4().hex[:8]}.png"
         image_path = os.path.join(static_dir, image_filename)
         
         # Save the image
-        img.save(image_path, format='PNG')
+        try:
+            img.save(image_path, format='PNG')
+            logger.info(f"Image saved to {image_path}")
+        except Exception as e:
+            logger.error(f"Failed to save image to {image_path}: {e}")
+            # Try saving to system temp directory as last resort
+            temp_dir = tempfile.gettempdir()
+            image_path = os.path.join(temp_dir, image_filename)
+            img.save(image_path, format='PNG')
+            logger.info(f"Image saved to temp location: {image_path}")
         
-        # Construct image URL
-        # Note: This assumes the server is configured to serve static files
-        # In a production environment, you might want to use a CDN or dedicated file server
-        host_url = request.host_url.rstrip('/')
-        image_url = f"{host_url}/static/{image_filename}"
+        # Construct image URL with better URL handling for production environments
+        # Check if we're behind a proxy
+        proxy_path = os.environ.get('PROXY_PATH', '')
+        if proxy_path:
+            # If behind a proxy with a path, use that
+            base_url = proxy_path.rstrip('/')
+            image_url = f"{base_url}/static/{image_filename}"
+        else:
+            # Default behavior but make sure to include scheme, host and port
+            # Get only host part excluding path if any
+            host_url = request.host_url.rstrip('/')
+            image_url = f"{host_url}/static/{image_filename}"
+            
+        logger.info(f"Generated image URL: {image_url}")
         
-        logger.info(f"Image saved to {image_path}")
+        # Update the static file path in a global registry for lookup later
+        # This helps if the file is saved in a temp directory
+        if not hasattr(app, 'static_file_registry'):
+            app.static_file_registry = {}
+        app.static_file_registry[image_filename] = image_path
         
         # Return JSON with image URL
         return jsonify({
             "image_url": image_url,
-            "status": "success"
+            "status": "success",
+            "full_path": image_path  # Include full path for debugging
         })
     
     except Exception as e:
         logger.exception("Exception during image generation and processing")
         return jsonify({"error": f"Error processing image: {str(e)}"}), 500
 
-# Add a route to serve static files
+# Improved route to serve static files
 @app.route('/static/<path:filename>')
 def serve_static(filename):
-    static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
-    return send_file(os.path.join(static_dir, filename))
+    # First try the registry for files in non-standard locations
+    if hasattr(app, 'static_file_registry') and filename in app.static_file_registry:
+        logger.info(f"Serving {filename} from registry path: {app.static_file_registry[filename]}")
+        return send_file(app.static_file_registry[filename])
+    
+    # Try the standard static directory
+    try:
+        static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+        file_path = os.path.join(static_dir, filename)
+        if os.path.exists(file_path):
+            logger.info(f"Serving {filename} from standard static dir")
+            return send_file(file_path)
+    except Exception as e:
+        logger.warning(f"Error looking for file in standard location: {e}")
+    
+    # Try alternate locations
+    try:
+        alt_static_dir = os.path.join(os.getcwd(), 'static')
+        alt_file_path = os.path.join(alt_static_dir, filename)
+        if os.path.exists(alt_file_path):
+            logger.info(f"Serving {filename} from alternate static dir")
+            return send_file(alt_file_path)
+    except Exception as e:
+        logger.warning(f"Error looking for file in alternate location: {e}")
+    
+    # Try temp directory
+    try:
+        temp_static_dir = os.path.join(tempfile.gettempdir(), 'flask_app_static')
+        temp_file_path = os.path.join(temp_static_dir, filename)
+        if os.path.exists(temp_file_path):
+            logger.info(f"Serving {filename} from temp static dir")
+            return send_file(temp_file_path)
+    except Exception as e:
+        logger.warning(f"Error looking for file in temp directory: {e}")
+    
+    # If all else fails
+    logger.error(f"Static file {filename} not found in any location")
+    return jsonify({"error": f"File {filename} not found"}), 404
 
+# Modify the Flask run configuration at the bottom
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000) 
-
-
-# Add at the end of app.py
-if __name__ == '__main__':
+    # Log environment info
+    logger.info(f"Python version: {sys.version}")
+    logger.info(f"Working directory: {os.getcwd()}")
+    logger.info(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+    
     # In production, don't use debug mode
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    
+    # Add option to configure the host
+    host = os.environ.get('HOST', '0.0.0.0')
+    logger.info(f"Starting Flask server on {host}:{port}")
+    
+    app.run(host=host, port=port, debug=(os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'))

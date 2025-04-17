@@ -1,0 +1,32 @@
+[Unit]
+Description=Pinterest Image Generator Flask Service
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=your_username
+Group=your_username
+WorkingDirectory=/path/to/your/app
+ExecStart=/path/to/venv/bin/python app.py
+
+# Environment variables
+Environment=FLASK_DEBUG=false
+Environment=PORT=5000
+# For proxy support (uncomment if needed)
+#Environment=PROXY_PATH=https://your-domain.com
+
+# Make sure logs have good timestamps
+StandardOutput=journal
+StandardError=journal
+
+# Restart policy
+Restart=always
+RestartSec=5
+
+# Security-related settings
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target 
