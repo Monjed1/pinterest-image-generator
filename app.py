@@ -23,7 +23,7 @@ import sys
 import pathlib
 
 # Setup logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Load environment variables if any
@@ -496,11 +496,13 @@ def generate_image():
             
         # Style 4 implementation - Image at top, dark rectangle at bottom with title and branding
         elif style == 'style4':
+            logger.debug("Applying Style 4")
             # Convert to RGBA for adding elements
             img = img.convert('RGBA')
             
             # Define dimensions for bottom rectangle
             bottom_rect_height = 450  # Bottom dark rectangle height
+            logger.debug(f"Style 4: bottom_rect_height = {bottom_rect_height}")
             
             # Create new image for composition
             new_img = Image.new('RGBA', target_size, (0, 0, 0, 0))
@@ -517,7 +519,7 @@ def generate_image():
             
             # Update img for further processing
             img = new_img
-            
+        
         # Style 5 implementation - Image at top with curved dark shape at bottom
         elif style == 'style5':
             # Convert to RGBA for adding elements
@@ -619,10 +621,20 @@ def generate_image():
             wrapped_lines = wrap_text(title, font, max_width)
             
         # Calculate text height and position
-        line_heights = [draw.textbbox((0,0), line, font=font)[3] - draw.textbbox((0,0), line, font=font)[1] for line in wrapped_lines]
+        line_heights = []
+        try:
+            # Use textbbox if available (more accurate)
+            line_heights = [draw.textbbox((0,0), line, font=font)[3] - draw.textbbox((0,0), line, font=font)[1] for line in wrapped_lines]
+        except AttributeError:
+            # Fallback for older Pillow versions or if textbbox fails
+            logger.warning("draw.textbbox not available or failed, using textsize as fallback for height.")
+            line_heights = [draw.textsize(line, font=font)[1] for line in wrapped_lines] # Fallback
+            
         line_spacing_factor = 1.3
         total_text_height = sum(lh * line_spacing_factor for lh in line_heights) - (line_heights[0] * (line_spacing_factor - 1.2)) # Adjust first line spacing
         available_height = target_size[1]
+        logger.debug(f"Calculated line heights: {line_heights}")
+        logger.debug(f"Calculated total_text_height: {total_text_height}")
         
         # Adjust text position based on style
         if style == 'style2':
@@ -643,7 +655,7 @@ def generate_image():
             # For Style 4, position text in the bottom rectangle
             # Position based on available space within the bottom rectangle
             # Assuming the branding bar is at bottom, position title above it
-            bottom_rect_height = 450  # Must match the value from the style4 implementation
+            # bottom_rect_height = 450 # Already defined
             
             # Reserve space at bottom for branding bar (will be added later)
             branding_bar_height = 60
@@ -652,8 +664,11 @@ def generate_image():
             # Calculate where to position the title - centered in remaining space
             title_area_height = bottom_rect_height - branding_bar_height - branding_bar_margin
             text_y = target_size[1] - bottom_rect_height + (title_area_height - total_text_height) // 2
+            logger.debug(f"Style 4: title_area_height = {title_area_height}")
+            logger.debug(f"Style 4: Calculated initial text_y = {text_y}")
             # Ensure minimum padding
             text_y = max(target_size[1] - bottom_rect_height + 40, text_y)
+            logger.debug(f"Style 4: Final text_y after padding adjustment = {text_y}")
         elif style == 'style5':
             # For Style 5, position title in the curved dark section
             # We want to center it vertically in the dark section, adjusting for the curve
@@ -737,10 +752,28 @@ def generate_image():
 
         # --- Text Drawing ---
         current_y = text_y # Reset Y position for drawing
+        logger.debug(f"Starting text drawing at current_y = {current_y}")
         for i, line in enumerate(wrapped_lines):
-            line_width = draw.textlength(line, font=font)
+            logger.debug(f"Drawing line {i+1}/{len(wrapped_lines)}: '{line}'")
+            try:
+                 # Use textlength if available (more accurate)
+                 line_width = draw.textlength(line, font=font)
+            except AttributeError:
+                 logger.warning("draw.textlength not available, using textsize as fallback for width.")
+                 line_width = draw.textsize(line, font=font)[0] # Fallback
+                 
             line_x = (target_size[0] - line_width) // 2
-            actual_line_height = line_heights[i] * (line_spacing_factor if i > 0 else 1.2)
+            # Use the actual calculated height for this specific line for incrementing Y
+            # Ensure index is valid before accessing line_heights
+            if i < len(line_heights):
+                 actual_line_height = line_heights[i] * (line_spacing_factor if i > 0 else 1.2)
+            else:
+                 # Fallback if line_heights calculation had an issue
+                 logger.warning(f"Index {i} out of bounds for line_heights (length {len(line_heights)}). Using fallback height.")
+                 actual_line_height = base_font_size * (line_spacing_factor if i > 0 else 1.2) # Less accurate fallback
+                 
+            logger.debug(f"  Line width={line_width}, calculated line_x={line_x}, actual_line_height={actual_line_height}")
+
             # --- Start Replace ---  (Replace old Style 1 logic)
             if style == 'style2':
                 # Style 2: Golden text with enhanced shadow for readability
@@ -824,15 +857,25 @@ def generate_image():
                 style4_font = load_bundled_font(style4_font_preferences, int(base_font_size * style4_font_scale))
                 # Use the specific font if successfully loaded, otherwise fallback to original font
                 current_font = style4_font if style4_font else font
+                logger.debug(f"  Style 4: Using font: {current_font.path if hasattr(current_font, 'path') else 'Default/Unknown'} at size {current_font.size if hasattr(current_font, 'size') else 'Unknown'}")
                 
                 # Ensure perfect centering for each line
-                line_width = draw.textlength(line, font=current_font)
+                try:
+                     line_width = draw.textlength(line, font=current_font)
+                except AttributeError:
+                     line_width = draw.textsize(line, font=current_font)[0] # Fallback
                 adjusted_line_x = (target_size[0] - line_width) // 2
+                logger.debug(f"  Style 4: Recalculated line_width={line_width}, adjusted_line_x={adjusted_line_x}")
                 
                 # If text is too close to edges, adjust positioning
-                if adjusted_line_x + line_width > target_size[0] - 40:  # 40px right margin
-                    adjusted_line_x = max(40, target_size[0] - line_width - 40)  # Ensure minimum 40px from left
-                
+                if adjusted_line_x < 40: # Check left edge
+                     logger.debug(f"  Style 4: Adjusting line_x from {adjusted_line_x} to 40 (left bound)")
+                     adjusted_line_x = 40
+                elif adjusted_line_x + line_width > target_size[0] - 40:  # Check right edge
+                     new_x = target_size[0] - line_width - 40
+                     logger.debug(f"  Style 4: Adjusting line_x from {adjusted_line_x} to {new_x} (right bound)")
+                     adjusted_line_x = max(40, new_x) # Ensure it doesn't go past left bound either
+
                 # Use the specified gold color (#d7bd45)
                 style4_text_color = (215, 189, 69)  # #d7bd45 converted to RGB
                 
