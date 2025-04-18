@@ -19,11 +19,9 @@ import uuid
 import aiohttp
 from dotenv import load_dotenv
 import math
-import sys
-import pathlib
 
 # Setup logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Load environment variables if any
@@ -496,13 +494,11 @@ def generate_image():
             
         # Style 4 implementation - Image at top, dark rectangle at bottom with title and branding
         elif style == 'style4':
-            logger.debug("Applying Style 4")
             # Convert to RGBA for adding elements
             img = img.convert('RGBA')
             
             # Define dimensions for bottom rectangle
             bottom_rect_height = 450  # Bottom dark rectangle height
-            logger.debug(f"Style 4: bottom_rect_height = {bottom_rect_height}")
             
             # Create new image for composition
             new_img = Image.new('RGBA', target_size, (0, 0, 0, 0))
@@ -519,7 +515,7 @@ def generate_image():
             
             # Update img for further processing
             img = new_img
-        
+            
         # Style 5 implementation - Image at top with curved dark shape at bottom
         elif style == 'style5':
             # Convert to RGBA for adding elements
@@ -597,43 +593,12 @@ def generate_image():
         draw = ImageDraw.Draw(img) # Initial draw object on base image
         
         # --- Font Loading ---
-        # Load the *correct* font based on the selected style *before* calculations
-        logger.info(f"Loading font for style \'{style}\'...")
-        current_style_font_size = base_font_size
-        if style == 'style2':
-            font = load_bundled_font(['EBGaramond-Bold.ttf'], int(base_font_size * 1.0)) # Style 2 uses 1.0 scale
-            current_style_font_size = int(base_font_size * 1.0)
-        elif style == 'style3':
-            font = load_bundled_font(style3_font_preferences, int(base_font_size * 1.1)) # Style 3 uses 1.1 scale
-            current_style_font_size = int(base_font_size * 1.1)
-        elif style == 'style4':
-            font = load_bundled_font(style4_font_preferences, int(base_font_size * 1.1)) # Style 4 uses 1.1 scale
-            current_style_font_size = int(base_font_size * 1.1)
-        elif style == 'style5':
-            font = load_bundled_font(style5_font_preferences, int(base_font_size * 1.2)) # Style 5 uses 1.2 scale
-            current_style_font_size = int(base_font_size * 1.2)
-        else: # Style 1 or default
-            font = load_bundled_font(main_font_preferences, base_font_size)
-            current_style_font_size = base_font_size
-        
-        # Fallback if style-specific font failed to load
-        if not font:
-             logger.warning(f"Style-specific font loading failed for style '{style}'. Falling back to main preferences.")
-             font = load_bundled_font(main_font_preferences, base_font_size)
-             current_style_font_size = base_font_size # Reset size if font changed
-             # Final fallback if even main prefs fail
-             if not font:
-                  logger.error("CRITICAL: All font loading failed. Using Pillow default.")
-                  try:
-                       font = ImageFont.load_default(size=base_font_size)
-                  except TypeError:
-                       font = ImageFont.load_default() # Older Pillow
-                  current_style_font_size = base_font_size # Assume intended size
+        branding_font_size = 60 # Note: subtitle font seems unused currently
 
-        logger.info(f"Using font: {font.path if hasattr(font, 'path') else 'Default/Unknown'} at size {current_style_font_size}")
+        logger.info("Loading main font...")
+        font = load_bundled_font(main_font_preferences, base_font_size)
 
         # --- Auto-scale font size / Text wrapping ---
-        # NOTE: Text wrapping still uses the loaded `font` variable which now corresponds to the style
         max_width = target_size[0] - 120 # Max width for title text
         
         # For style 2, increase the text padding from edges
@@ -642,56 +607,20 @@ def generate_image():
             max_width = target_size[0] - 160
         
         # Initial wrap
-        logger.debug(f"Wrapping text with max_width = {max_width}")
         wrapped_lines = wrap_text(title, font, max_width)
         
-        # Dynamically adjust font size if text is too long
-        # We might need to reload the font here if size changes significantly
-        # This part might need refinement if auto-scaling is still desired across styles
-        _current_font_size_for_scaling = current_style_font_size
-        while len(wrapped_lines) > 6 and _current_font_size_for_scaling > 30:
-            _current_font_size_for_scaling -= 5
-            logger.info(f"Text too long, reducing effective font size for wrapping to {_current_font_size_for_scaling}")
-            # Reload the *same* style font with the smaller size for wrapping check
-            # This assumes the preference list remains the same, just the size changes
-            _temp_font_for_scaling = None
-            if style == 'style2':
-                _temp_font_for_scaling = load_bundled_font(['EBGaramond-Bold.ttf'], _current_font_size_for_scaling)
-            elif style == 'style3':
-                 _temp_font_for_scaling = load_bundled_font(style3_font_preferences, _current_font_size_for_scaling)
-            elif style == 'style4':
-                 _temp_font_for_scaling = load_bundled_font(style4_font_preferences, _current_font_size_for_scaling)
-            elif style == 'style5':
-                 _temp_font_for_scaling = load_bundled_font(style5_font_preferences, _current_font_size_for_scaling)
-            else: # Style 1 or default
-                 _temp_font_for_scaling = load_bundled_font(main_font_preferences, _current_font_size_for_scaling)
-
-            if _temp_font_for_scaling: # Only re-wrap if font loaded successfully
-                 font = _temp_font_for_scaling # Update the main font variable
-                 current_style_font_size = _current_font_size_for_scaling # Update the size tracking variable
-                 wrapped_lines = wrap_text(title, font, max_width)
-            else:
-                 logger.warning("Failed to load smaller font during auto-scaling, stopping scaling.")
-                 break # Avoid infinite loop if font loading fails
-
-        logger.debug(f"Final wrapped lines: {wrapped_lines}")
-        logger.debug(f"Final font size after scaling: {current_style_font_size}")
-
-        # Calculate text height and position using the *final* loaded font
-        line_heights = []
-        try:
-            # Use textbbox if available (more accurate)
-            line_heights = [draw.textbbox((0,0), line, font=font)[3] - draw.textbbox((0,0), line, font=font)[1] for line in wrapped_lines]
-        except AttributeError:
-            # Fallback for older Pillow versions or if textbbox fails
-            logger.warning("draw.textbbox not available or failed, using textsize as fallback for height.")
-            line_heights = [draw.textsize(line, font=font)[1] for line in wrapped_lines] # Fallback
+        # Dynamically adjust font size
+        while len(wrapped_lines) > 6 and base_font_size > 30:
+            base_font_size -= 5
+            logger.info(f"Text too long, reducing main font size to {base_font_size}")
+            font = load_bundled_font(main_font_preferences, base_font_size) # Reload font
+            wrapped_lines = wrap_text(title, font, max_width)
             
+        # Calculate text height and position
+        line_heights = [draw.textbbox((0,0), line, font=font)[3] - draw.textbbox((0,0), line, font=font)[1] for line in wrapped_lines]
         line_spacing_factor = 1.3
         total_text_height = sum(lh * line_spacing_factor for lh in line_heights) - (line_heights[0] * (line_spacing_factor - 1.2)) # Adjust first line spacing
         available_height = target_size[1]
-        logger.debug(f"Calculated line heights: {line_heights}")
-        logger.debug(f"Calculated total_text_height: {total_text_height}")
         
         # Adjust text position based on style
         if style == 'style2':
@@ -712,7 +641,7 @@ def generate_image():
             # For Style 4, position text in the bottom rectangle
             # Position based on available space within the bottom rectangle
             # Assuming the branding bar is at bottom, position title above it
-            # bottom_rect_height = 450 # Already defined
+            bottom_rect_height = 450  # Must match the value from the style4 implementation
             
             # Reserve space at bottom for branding bar (will be added later)
             branding_bar_height = 60
@@ -721,11 +650,8 @@ def generate_image():
             # Calculate where to position the title - centered in remaining space
             title_area_height = bottom_rect_height - branding_bar_height - branding_bar_margin
             text_y = target_size[1] - bottom_rect_height + (title_area_height - total_text_height) // 2
-            logger.debug(f"Style 4: title_area_height = {title_area_height}")
-            logger.debug(f"Style 4: Calculated initial text_y = {text_y}")
             # Ensure minimum padding
             text_y = max(target_size[1] - bottom_rect_height + 40, text_y)
-            logger.debug(f"Style 4: Final text_y after padding adjustment = {text_y}")
         elif style == 'style5':
             # For Style 5, position title in the curved dark section
             # We want to center it vertically in the dark section, adjusting for the curve
@@ -753,44 +679,79 @@ def generate_image():
                 # If text is very long and would overlap with bottom elements, adjust as needed
                 text_y = max(40, available_height - 200 - total_text_height)
 
+        # --- Text Background Box (Only for Style 1) ---
+        if style == 'style1':
+            padding = 35
+            corner_radius = 25
+            bg_color = (0, 0, 0, 140)
+            shadow_color_box = (0, 0, 0, 70)
+            shadow_offset_box = (5, 5)
+
+            # Calculate text block bounding box
+            max_line_width = 0
+            _current_y_bbox = text_y # Use a temp var for bbox calculation y
+            text_block_bbox = [target_size[0], target_size[1], 0, 0] # [min_x, min_y, max_x, max_y]
+            for i, line in enumerate(wrapped_lines):
+                line_width = draw.textlength(line, font=font)
+                max_line_width = max(max_line_width, line_width)
+                line_x = (target_size[0] - line_width) // 2
+                actual_line_height = line_heights[i] * (line_spacing_factor if i > 0 else 1.2)
+                text_block_bbox[0] = min(text_block_bbox[0], line_x)
+                text_block_bbox[1] = min(text_block_bbox[1], _current_y_bbox)
+                text_block_bbox[2] = max(text_block_bbox[2], line_x + line_width)
+                text_block_bbox[3] = max(text_block_bbox[3], _current_y_bbox + actual_line_height)
+                _current_y_bbox += actual_line_height
+
+            # Calculate box dimensions
+            box_left = int(text_block_bbox[0] - padding)
+            box_top = int(text_block_bbox[1] - padding)
+            box_right = int(text_block_bbox[2] + padding)
+            box_bottom = int(text_block_bbox[3] + padding * 0.5)
+            box_width = box_right - box_left
+            box_height = box_bottom - box_top
+
+            # Ensure box is within bounds
+            box_left = max(0, box_left)
+            box_top = max(0, box_top)
+            box_right = min(target_size[0], box_right)
+            box_bottom = min(target_size[1], box_bottom)
+            box_width = box_right - box_left
+            box_height = box_bottom - box_top
+
+            if box_width > 0 and box_height > 0:
+                # Draw box on a separate surface and composite
+                box_surface = Image.new('RGBA', img.size, (0,0,0,0))
+                box_draw = ImageDraw.Draw(box_surface)
+                # Shadow
+                shadow_rect = [(box_left + shadow_offset_box[0], box_top + shadow_offset_box[1]),
+                               (box_right + shadow_offset_box[0], box_bottom + shadow_offset_box[1])]
+                box_draw.rounded_rectangle(shadow_rect, radius=corner_radius, fill=shadow_color_box)
+                # Main box
+                main_rect = [(box_left, box_top), (box_right, box_bottom)]
+                box_draw.rounded_rectangle(main_rect, radius=corner_radius, fill=bg_color)
+                # Composite
+                img = Image.alpha_composite(img.convert('RGBA'), box_surface) # Keep as RGBA for now
+                draw = ImageDraw.Draw(img) # Re-assign draw object to the updated image
+
         # --- Text Drawing ---
         current_y = text_y # Reset Y position for drawing
-        logger.debug(f"Starting text drawing at current_y = {current_y}")
         for i, line in enumerate(wrapped_lines):
-            logger.debug(f"Drawing line {i+1}/{len(wrapped_lines)}: '{line}'")
-            # Use the main `font` variable which is now style-specific
-            try:
-                 line_width = draw.textlength(line, font=font)
-            except AttributeError:
-                 logger.warning("draw.textlength not available, using textsize as fallback for width.")
-                 line_width = draw.textsize(line, font=font)[0] # Fallback
-                 
+            line_width = draw.textlength(line, font=font)
             line_x = (target_size[0] - line_width) // 2
-            # Use the actual calculated height for this specific line for incrementing Y
-            # Ensure index is valid before accessing line_heights
-            if i < len(line_heights):
-                 actual_line_height = line_heights[i] * (line_spacing_factor if i > 0 else 1.2)
-            else:
-                 # Fallback if line_heights calculation had an issue
-                 logger.warning(f"Index {i} out of bounds for line_heights (length {len(line_heights)}). Using fallback height.")
-                 actual_line_height = current_style_font_size * (line_spacing_factor if i > 0 else 1.2) # Use current_style_font_size as base
-                 
-            logger.debug(f"  Line width={line_width}, calculated line_x={line_x}, actual_line_height={actual_line_height}")
-
-            # Apply style-specific drawing logic
+            actual_line_height = line_heights[i] * (line_spacing_factor if i > 0 else 1.2)
+            # --- Start Replace ---  (Replace old Style 1 logic)
             if style == 'style2':
                 # Style 2: Golden text with enhanced shadow for readability
                 # Make title larger for Style 2 but ensure it stays within boundaries
                 style2_font_scale = 1.0 # Increased from 0.9 for larger text
                 
                 # Use EBGaramond-Bold.ttf specifically for Style 2
-                current_font = font # Use the pre-loaded font variable
+                style2_font = load_bundled_font(['EBGaramond-Bold.ttf'], int(base_font_size * style2_font_scale))
+                # Use the specific font if successfully loaded, otherwise fallback to original font
+                current_font = style2_font if style2_font else font
                 
                 # Ensure perfect centering for each line
-                try:
-                     line_width = draw.textlength(line, font=current_font)
-                except AttributeError:
-                     line_width = draw.textsize(line, font=current_font)[0] # Fallback
+                line_width = draw.textlength(line, font=current_font)
                 adjusted_line_x = (target_size[0] - line_width) // 2
                 
                 # If text is too close to edges, adjust positioning
@@ -825,13 +786,15 @@ def generate_image():
             elif style == 'style3':
                 # Style 3: Clean white text on black bars
                 # Use Nunito-ExtraBold.ttf specifically for Style 3
-                current_font = font # Use the pre-loaded font variable
+                style3_font_scale = 1.1  # Scale up font size for Style 3 title
+                
+                # Reuse the font we already loaded earlier during bar height calculation
+                current_font = temp_font if 'temp_font' in locals() else (
+                    load_bundled_font(style3_font_preferences, int(base_font_size * style3_font_scale)) or font
+                )
                 
                 # Ensure perfect centering for each line
-                try:
-                    line_width = draw.textlength(line, font=current_font)
-                except AttributeError:
-                    line_width = draw.textsize(line, font=current_font)[0] # Fallback
+                line_width = draw.textlength(line, font=current_font)
                 adjusted_line_x = (target_size[0] - line_width) // 2
                 
                 # Ensure minimum margins
@@ -852,42 +815,44 @@ def generate_image():
                 # Main text
                 draw.text((adjusted_line_x, current_y), line, fill=style3_text_color, font=current_font)
             elif style == 'style4':
-                # Style 4: Gold-colored text...
-                current_font = font # Use the pre-loaded font variable
-                logger.debug(f"  Style 4: Using pre-loaded font: {current_font.path if hasattr(current_font, 'path') else 'Default/Unknown'} at size {current_font.size if hasattr(current_font, 'size') else 'Unknown'}")
-
-                # Recalculate line width *with the correct font* for centering this specific line
-                try:
-                     line_width = draw.textlength(line, font=current_font)
-                except AttributeError:
-                     line_width = draw.textsize(line, font=current_font)[0] # Fallback
+                # Style 4: Gold-colored text in the bottom rectangle using Vidaloka font
+                style4_font_scale = 1.1  # Scale up font size for Style 4 title
+                
+                # Load Vidaloka font for Style 4
+                style4_font = load_bundled_font(style4_font_preferences, int(base_font_size * style4_font_scale))
+                # Use the specific font if successfully loaded, otherwise fallback to original font
+                current_font = style4_font if style4_font else font
+                
+                # Ensure perfect centering for each line
+                line_width = draw.textlength(line, font=current_font)
                 adjusted_line_x = (target_size[0] - line_width) // 2
-                logger.debug(f"  Style 4: Line specific width={line_width}, adjusted_line_x={adjusted_line_x}")
-
-                # ... edge adjustment logic ...
-                if adjusted_line_x < 40: # Check left edge
-                     logger.debug(f"  Style 4: Adjusting line_x from {adjusted_line_x} to 40 (left bound)")
-                     adjusted_line_x = 40
-                elif adjusted_line_x + line_width > target_size[0] - 40:  # Check right edge
-                     new_x = target_size[0] - line_width - 40
-                     logger.debug(f"  Style 4: Adjusting line_x from {adjusted_line_x} to {new_x} (right bound)")
-                     adjusted_line_x = max(40, new_x) # Ensure it doesn't go past left bound either
-
-                style4_text_color = (215, 189, 69)
+                
+                # If text is too close to edges, adjust positioning
+                if adjusted_line_x + line_width > target_size[0] - 40:  # 40px right margin
+                    adjusted_line_x = max(40, target_size[0] - line_width - 40)  # Ensure minimum 40px from left
+                
+                # Use the specified gold color (#d7bd45)
+                style4_text_color = (215, 189, 69)  # #d7bd45 converted to RGB
+                
+                # First draw a subtle shadow for depth against dark background
                 shadow_offset = (2, 2)
                 shadow_color = (0, 0, 0, 150)
                 draw.text((adjusted_line_x + shadow_offset[0], current_y + shadow_offset[1]),
                           line, fill=shadow_color, font=current_font)
+                
+                # Main gold text
                 draw.text((adjusted_line_x, current_y), line, fill=style4_text_color, font=current_font)
             elif style == 'style5':
                 # Style 5: White bold text in the dark curved section using LeagueSpartan-Bold font
-                current_font = font # Use the pre-loaded font variable
+                style5_font_scale = 1.2  # Scale up font size for more impact
+                
+                # Load LeagueSpartan-Bold font for Style 5
+                style5_font = load_bundled_font(style5_font_preferences, int(base_font_size * style5_font_scale))
+                # Use the specific font if successfully loaded, otherwise fallback to original font
+                current_font = style5_font if style5_font else font
                 
                 # Ensure perfect centering for each line
-                try:
-                    line_width = draw.textlength(line, font=current_font)
-                except AttributeError:
-                    line_width = draw.textsize(line, font=current_font)[0] # Fallback
+                line_width = draw.textlength(line, font=current_font)
                 adjusted_line_x = (target_size[0] - line_width) // 2
                 
                 # If text is too close to edges, adjust positioning
@@ -907,80 +872,15 @@ def generate_image():
                 draw.text((adjusted_line_x, current_y), line, fill=style5_text_color, font=current_font)
             else: # Style 1
                 # Style 1: White text with shadow
-                current_font = font # Use the pre-loaded font variable
                 shadow_offset = (4, 4)
                 shadow_color = (0, 0, 0, 128)
                 text_color = (255, 255, 255)
-                # Need to recalculate line_x based on current_font for Style 1 centering
-                try:
-                    line_width = draw.textlength(line, font=current_font)
-                except AttributeError:
-                    line_width = draw.textsize(line, font=current_font)[0] # Fallback
-                line_x = (target_size[0] - line_width) // 2
                 # Shadow
                 draw.text((line_x + shadow_offset[0], current_y + shadow_offset[1]),
-                          line, fill=shadow_color, font=current_font)
+                          line, fill=shadow_color, font=font)
                 # Main text
-                draw.text((line_x, current_y), line, fill=text_color, font=current_font)
-
-            # --- Add extra spacing adjustment specifically for Style 4 --- 
-            if style == 'style4':
-                # Add a small extra spacing factor for style 4 to prevent overlap
-                extra_spacing_factor = 1.15 # Start with 15% extra space, adjust if needed
-                original_height = actual_line_height
-                actual_line_height *= extra_spacing_factor 
-                logger.debug(f"  Style 4: Applied extra spacing factor {extra_spacing_factor}. Height changed from {original_height} to {actual_line_height}")
-            # --- End spacing adjustment ---
-
-            # Increment Y position for next line
-            current_y += actual_line_height
-            logger.debug(f"  Incremented current_y to {current_y}") 
-
-        # --- Draw Branding URL --- 
-        if branding_url:
-             logger.info(f"Drawing branding URL: {branding_url}")
-             try:
-                  # Define branding font and size
-                  branding_font_size = 30  # Smaller size for branding
-                  branding_font = load_bundled_font(branding_font_preferences, branding_font_size)
-                  if not branding_font:
-                       logger.warning("Branding font failed to load, using default.")
-                       branding_font = ImageFont.load_default(size=branding_font_size)
-                       
-                  # Calculate text width
-                  try:
-                      branding_width = draw.textlength(branding_url, font=branding_font)
-                  except AttributeError:
-                      branding_width = draw.textsize(branding_url, font=branding_font)[0]
-                      
-                  # Calculate position (bottom center with padding)
-                  padding_bottom = 30
-                  branding_x = (target_size[0] - branding_width) // 2
-                  # Calculate Y based on font bounding box for better vertical centering
-                  try:
-                       bbox = draw.textbbox((0,0), branding_url, font=branding_font)
-                       text_height = bbox[3] - bbox[1]
-                  except AttributeError:
-                       text_height = branding_font_size # Fallback height
-                       
-                  branding_y = target_size[1] - text_height - padding_bottom
-                  
-                  logger.debug(f"Branding text width={branding_width}, height={text_height}")
-                  logger.debug(f"Drawing branding at x={branding_x}, y={branding_y}")
-                  
-                  # Define text color and shadow (light color for dark backgrounds like Style 4)
-                  branding_text_color = (200, 200, 200) # Light gray
-                  branding_shadow_color = (0, 0, 0, 100)
-                  branding_shadow_offset = (1, 1)
-                  
-                  # Draw shadow
-                  draw.text((branding_x + branding_shadow_offset[0], branding_y + branding_shadow_offset[1]), 
-                            branding_url, fill=branding_shadow_color, font=branding_font)
-                  # Draw main text
-                  draw.text((branding_x, branding_y), branding_url, fill=branding_text_color, font=branding_font)
-                  
-             except Exception as e:
-                  logger.error(f"Error drawing branding URL: {e}", exc_info=True)
+                draw.text((line_x, current_y), line, fill=text_color, font=font)
+            # --- End Replace ---
 
         # --- Final Touches ---
         # Apply professional shadow effect to the entire image for Style 2
@@ -1042,142 +942,48 @@ def generate_image():
             # Ensure proper conversion back to RGB for saving
             img = img.convert("RGB")
         
-        # Create a static directory if it doesn't exist - IMPROVED PATH HANDLING
-        # First try using the absolute path method
-        try:
-            static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
-            logger.info(f"Attempting to use static directory at: {static_dir}")
-            
-            # Check if this path is writeable
-            if not os.access(os.path.dirname(static_dir), os.W_OK):
-                logger.warning(f"No write access to {os.path.dirname(static_dir)}, trying alternate location")
-                # Try an alternative location - current working directory
-                static_dir = os.path.join(os.getcwd(), 'static')
-                logger.info(f"Using alternative static directory at: {static_dir}")
-            
-            if not os.path.exists(static_dir):
-                logger.info(f"Static directory doesn't exist. Creating at: {static_dir}")
-                os.makedirs(static_dir, exist_ok=True)
-                
-            # Double check we can write to this directory
-            if not os.access(static_dir, os.W_OK):
-                logger.warning(f"No write access to {static_dir}, trying system temp directory")
-                # Use system temp directory as last resort
-                static_dir = os.path.join(tempfile.gettempdir(), 'flask_app_static')
-                os.makedirs(static_dir, exist_ok=True)
-                logger.info(f"Using system temp directory at: {static_dir}")
-        except Exception as e:
-            # Last resort - use system temp directory
-            logger.error(f"Error setting up static directory: {e}")
-            static_dir = os.path.join(tempfile.gettempdir(), 'flask_app_static')
-            os.makedirs(static_dir, exist_ok=True)
-            logger.info(f"Using system temp directory for static files: {static_dir}")
-            
-        # Log static directory permissions
-        logger.info(f"Static directory permissions: {oct(os.stat(static_dir).st_mode)[-3:]}")
+        # Create a static directory if it doesn't exist
+        static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+        if not os.path.exists(static_dir):
+            os.makedirs(static_dir)
         
         # Generate a unique filename
         image_filename = f"generated_{int(time.time())}_{uuid.uuid4().hex[:8]}.png"
         image_path = os.path.join(static_dir, image_filename)
         
         # Save the image
-        try:
-            img.save(image_path, format='PNG')
-            logger.info(f"Image saved to {image_path}")
-        except Exception as e:
-            logger.error(f"Failed to save image to {image_path}: {e}")
-            # Try saving to system temp directory as last resort
-            temp_dir = tempfile.gettempdir()
-            image_path = os.path.join(temp_dir, image_filename)
-            img.save(image_path, format='PNG')
-            logger.info(f"Image saved to temp location: {image_path}")
+        img.save(image_path, format='PNG')
         
-        # Construct image URL with better URL handling for production environments
-        # Check if we're behind a proxy
-        proxy_path = os.environ.get('PROXY_PATH', '')
-        if proxy_path:
-            # If behind a proxy with a path, use that
-            base_url = proxy_path.rstrip('/')
-            image_url = f"{base_url}/static/{image_filename}"
-        else:
-            # Default behavior but make sure to include scheme, host and port
-            # Get only host part excluding path if any
-            host_url = request.host_url.rstrip('/')
-            image_url = f"{host_url}/static/{image_filename}"
-            
-        logger.info(f"Generated image URL: {image_url}")
+        # Construct image URL
+        # Note: This assumes the server is configured to serve static files
+        # In a production environment, you might want to use a CDN or dedicated file server
+        host_url = request.host_url.rstrip('/')
+        image_url = f"{host_url}/static/{image_filename}"
         
-        # Update the static file path in a global registry for lookup later
-        # This helps if the file is saved in a temp directory
-        if not hasattr(app, 'static_file_registry'):
-            app.static_file_registry = {}
-        app.static_file_registry[image_filename] = image_path
+        logger.info(f"Image saved to {image_path}")
         
         # Return JSON with image URL
         return jsonify({
             "image_url": image_url,
-            "status": "success",
-            "full_path": image_path  # Include full path for debugging
+            "status": "success"
         })
     
     except Exception as e:
         logger.exception("Exception during image generation and processing")
         return jsonify({"error": f"Error processing image: {str(e)}"}), 500
 
-# Improved route to serve static files
+# Add a route to serve static files
 @app.route('/static/<path:filename>')
 def serve_static(filename):
-    # First try the registry for files in non-standard locations
-    if hasattr(app, 'static_file_registry') and filename in app.static_file_registry:
-        logger.info(f"Serving {filename} from registry path: {app.static_file_registry[filename]}")
-        return send_file(app.static_file_registry[filename])
-    
-    # Try the standard static directory
-    try:
-        static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
-        file_path = os.path.join(static_dir, filename)
-        if os.path.exists(file_path):
-            logger.info(f"Serving {filename} from standard static dir")
-            return send_file(file_path)
-    except Exception as e:
-        logger.warning(f"Error looking for file in standard location: {e}")
-    
-    # Try alternate locations
-    try:
-        alt_static_dir = os.path.join(os.getcwd(), 'static')
-        alt_file_path = os.path.join(alt_static_dir, filename)
-        if os.path.exists(alt_file_path):
-            logger.info(f"Serving {filename} from alternate static dir")
-            return send_file(alt_file_path)
-    except Exception as e:
-        logger.warning(f"Error looking for file in alternate location: {e}")
-    
-    # Try temp directory
-    try:
-        temp_static_dir = os.path.join(tempfile.gettempdir(), 'flask_app_static')
-        temp_file_path = os.path.join(temp_static_dir, filename)
-        if os.path.exists(temp_file_path):
-            logger.info(f"Serving {filename} from temp static dir")
-            return send_file(temp_file_path)
-    except Exception as e:
-        logger.warning(f"Error looking for file in temp directory: {e}")
-    
-    # If all else fails
-    logger.error(f"Static file {filename} not found in any location")
-    return jsonify({"error": f"File {filename} not found"}), 404
+    static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+    return send_file(os.path.join(static_dir, filename))
 
-# Modify the Flask run configuration at the bottom
 if __name__ == '__main__':
-    # Log environment info
-    logger.info(f"Python version: {sys.version}")
-    logger.info(f"Working directory: {os.getcwd()}")
-    logger.info(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
-    
+    app.run(debug=True, host='0.0.0.0', port=5000) 
+
+
+# Add at the end of app.py
+if __name__ == '__main__':
     # In production, don't use debug mode
     port = int(os.environ.get('PORT', 5000))
-    
-    # Add option to configure the host
-    host = os.environ.get('HOST', '0.0.0.0')
-    logger.info(f"Starting Flask server on {host}:{port}")
-    
-    app.run(host=host, port=port, debug=(os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'))
+    app.run(host='0.0.0.0', port=port)
