@@ -444,13 +444,13 @@ def generate_image():
             img = img.convert('RGBA')
             
             # First calculate text dimensions to determine appropriate top bar height
-            style3_font_scale = 1.1
+            style3_font_scale = 1.0  # Reduced from 1.1 to ensure text fits better in the box
             style3_font = load_bundled_font(style3_font_preferences, int(base_font_size * style3_font_scale))
             temp_font = style3_font if style3_font else font
             
             # Calculate wrapped text height
             temp_draw = ImageDraw.Draw(Image.new('RGB', (1,1)))
-            max_text_width = target_size[0] - 80  # Some padding from edges
+            max_text_width = target_size[0] - 100  # Increased padding from 80 to 100 for better fit
             
             # Wrap text for measurement
             temp_wrapped_lines = wrap_text(title, temp_font, max_text_width)
@@ -640,18 +640,12 @@ def generate_image():
         elif style == 'style4':
             # For Style 4, position text in the bottom rectangle
             # Position based on available space within the bottom rectangle
-            # Assuming the branding bar is at bottom, position title above it
-            bottom_rect_height = 450  # Must match the value from the style4 implementation
+            # bottom_rect_height = 450 # Already defined
             
-            # Reserve space at bottom for branding bar (will be added later)
-            branding_bar_height = 60
-            branding_bar_margin = 60  # Space between branding bar and title
-            
-            # Calculate where to position the title - centered in remaining space
-            title_area_height = bottom_rect_height - branding_bar_height - branding_bar_margin
-            text_y = target_size[1] - bottom_rect_height + (title_area_height - total_text_height) // 2
-            # Ensure minimum padding
-            text_y = max(target_size[1] - bottom_rect_height + 40, text_y)
+            # New calculation: Position near top of the dark rectangle + padding
+            top_padding_in_rect = 60 # Increase padding from top of rectangle
+            text_y = target_size[1] - bottom_rect_height + top_padding_in_rect
+            logger.debug(f"Style 4: Calculated text_y based on top alignment = {text_y}")
         elif style == 'style5':
             # For Style 5, position title in the curved dark section
             # We want to center it vertically in the dark section, adjusting for the curve
@@ -683,7 +677,7 @@ def generate_image():
         if style == 'style1':
             padding = 35
             corner_radius = 25
-            bg_color = (0, 0, 0, 140)
+            bg_color = (0, 0, 0, 180)  # Increased opacity to match example
             shadow_color_box = (0, 0, 0, 70)
             shadow_offset_box = (5, 5)
 
@@ -702,11 +696,14 @@ def generate_image():
                 text_block_bbox[3] = max(text_block_bbox[3], _current_y_bbox + actual_line_height)
                 _current_y_bbox += actual_line_height
 
+            # Make the box wider to match example
+            box_padding_sides = 50
+            
             # Calculate box dimensions
-            box_left = int(text_block_bbox[0] - padding)
+            box_left = int(text_block_bbox[0] - box_padding_sides)
             box_top = int(text_block_bbox[1] - padding)
-            box_right = int(text_block_bbox[2] + padding)
-            box_bottom = int(text_block_bbox[3] + padding * 0.5)
+            box_right = int(text_block_bbox[2] + box_padding_sides)
+            box_bottom = int(text_block_bbox[3] + padding * 0.8)
             box_width = box_right - box_left
             box_height = box_bottom - box_top
 
@@ -784,22 +781,19 @@ def generate_image():
                 # Draw main text on top
                 draw.text((adjusted_line_x, current_y), line, fill=style2_text_color, font=current_font)
             elif style == 'style3':
-                # Style 3: Clean white text on black bars
-                # Use Nunito-ExtraBold.ttf specifically for Style 3
-                style3_font_scale = 1.1  # Scale up font size for Style 3 title
-                
-                # Reuse the font we already loaded earlier during bar height calculation
-                current_font = temp_font if 'temp_font' in locals() else (
-                    load_bundled_font(style3_font_preferences, int(base_font_size * style3_font_scale)) or font
-                )
+                # Style 3 - use white text on black bars with Nunito or similar font
+                style3_font_scale = 1.0  # Reduced from 1.1 for better fit
+                style3_font = load_bundled_font(style3_font_preferences, int(base_font_size * style3_font_scale))
+                # Use the specific font if successfully loaded, otherwise fallback to original font
+                current_font = style3_font if style3_font else font
                 
                 # Ensure perfect centering for each line
                 line_width = draw.textlength(line, font=current_font)
                 adjusted_line_x = (target_size[0] - line_width) // 2
                 
                 # Ensure minimum margins
-                if adjusted_line_x + line_width > target_size[0] - 40:
-                    adjusted_line_x = max(40, target_size[0] - line_width - 40)
+                if adjusted_line_x + line_width > target_size[0] - 50:  # Increased from 40 to 50
+                    adjusted_line_x = max(50, target_size[0] - line_width - 50)  # Ensure minimum 50px from sides
                 
                 # Pure white text for high contrast against black bar
                 style3_text_color = (255, 255, 255)
@@ -871,16 +865,389 @@ def generate_image():
                 # Main white text
                 draw.text((adjusted_line_x, current_y), line, fill=style5_text_color, font=current_font)
             else: # Style 1
-                # Style 1: White text with shadow
-                shadow_offset = (4, 4)
-                shadow_color = (0, 0, 0, 128)
-                text_color = (255, 255, 255)
+                # Style 1: Gold text with shadow to match example
+                # Use a slightly different font preference for Style 1
+                style1_font_scale = 1.05  # Slightly larger font
+                style1_font = load_bundled_font(['LeagueSpartan-Bold.ttf', 'Montserrat-Bold.ttf'], 
+                                               int(base_font_size * style1_font_scale))
+                # Use the specific font if successfully loaded, otherwise fallback to original font
+                current_font = style1_font if style1_font else font
+                
+                # Ensure perfect centering for each line
+                line_width = draw.textlength(line, font=current_font)
+                adjusted_line_x = (target_size[0] - line_width) // 2
+                
+                # Gold color like in the example
+                style1_text_color = (215, 189, 69)  # Gold color (#d7bd45)
+                shadow_offset = (3, 3)
+                shadow_color = (0, 0, 0, 150)
+                
                 # Shadow
-                draw.text((line_x + shadow_offset[0], current_y + shadow_offset[1]),
-                          line, fill=shadow_color, font=font)
+                draw.text((adjusted_line_x + shadow_offset[0], current_y + shadow_offset[1]),
+                          line, fill=shadow_color, font=current_font)
                 # Main text
-                draw.text((line_x, current_y), line, fill=text_color, font=font)
+                draw.text((adjusted_line_x, current_y), line, fill=style1_text_color, font=current_font)
             # --- End Replace ---
+
+            # !!! IMPORTANT: Re-insert the missing Y increment here !!!
+            current_y += actual_line_height
+
+        # --- Create dark bottom bar for Style 1 before any other elements ---
+        if style == 'style1' and branding_url:
+            # Define dark bar at bottom for branding URL
+            bottom_bar_height = 60  # Height of bottom bar
+            bottom_bar_color = (0, 0, 0, 200)  # Semi-transparent black, darker than before
+            
+            # Create the box
+            bottom_bar = Image.new('RGBA', (target_size[0], bottom_bar_height), bottom_bar_color)
+            
+            # Overlay the bar at the bottom of the image
+            img.paste(bottom_bar, (0, target_size[1] - bottom_bar_height), bottom_bar)
+            
+            # Update drawing context
+            draw = ImageDraw.Draw(img)
+
+        # --- Create dark bottom bar for Style 2 as well ---
+        if style == 'style2' and branding_url:
+            # Define dark bar at bottom for branding URL
+            bottom_bar_height = 60  # Height of bottom bar
+            bottom_bar_color = (0, 0, 0, 200)  # Semi-transparent black
+            
+            # Create the box
+            bottom_bar = Image.new('RGBA', (target_size[0], bottom_bar_height), bottom_bar_color)
+            
+            # Overlay the bar at the bottom of the image
+            img.paste(bottom_bar, (0, target_size[1] - bottom_bar_height), bottom_bar)
+            
+            # Update drawing context
+            draw = ImageDraw.Draw(img)
+
+        # --- Draw Branding URL (Re-added from previous version) --- 
+        if branding_url:
+             logger.info(f"Drawing branding URL: {branding_url}")
+             # Use the `current_y` value which marks the position *after* the last title line was drawn
+             title_bottom_y = current_y 
+             logger.debug(f"Position after last title line (current_y) = {title_bottom_y}")
+
+             try:
+                  # Skip drawing for Style 4 if already handled in final touches
+                  if style == 'style4' and 'style4_branding_done' in locals() and style4_branding_done:
+                      logger.info("Skipping regular branding URL draw for Style 4 - already handled in golden box")
+                      pass
+                  elif style == 'style5' and 'style5_branding_done' in locals() and style5_branding_done:
+                      logger.info("Skipping regular branding URL draw for Style 5 - already handled in white box")
+                      pass
+                  else:
+                      # Define branding font and size
+                      branding_font_size = 30  # Default size for branding
+                      
+                      if style == "style1":
+                          # Use the same font as the title and adjust size to fit in the bottom box
+                          branding_font_size = 36  # Reduced from 40 to fit better in the bottom box
+                          branding_font_preferences = ['LeagueSpartan-Bold.ttf', 'Montserrat-Bold.ttf']
+                      elif style == "style2":
+                          # Increase font size for Style 2 branding URL but ensure it fits well
+                          branding_font_size = 38  # Adjusted from 45 to fit better
+                          branding_font_preferences = ['EBGaramond-Bold.ttf', 'LeagueSpartan-Bold.ttf', 'Montserrat-Bold.ttf']
+                      
+                      branding_font = load_bundled_font(branding_font_preferences, branding_font_size)
+                      if not branding_font:
+                           logger.warning("Branding font failed to load, using default.")
+                           # Use Pillow default with size if possible
+                           try:
+                               branding_font = ImageFont.load_default(size=branding_font_size)
+                           except TypeError:
+                               branding_font = ImageFont.load_default() # Older Pillow
+                           
+                      # Calculate text width
+                      try:
+                          branding_width = draw.textlength(branding_url, font=branding_font)
+                      except AttributeError:
+                          branding_width = draw.textsize(branding_url, font=branding_font)[0]
+                          
+                      # Get text height
+                      try:
+                           bbox = draw.textbbox((0,0), branding_url, font=branding_font)
+                           text_height = bbox[3] - bbox[1]
+                      except AttributeError:
+                           text_height = branding_font_size # Fallback height
+
+                      # Center text horizontally
+                      branding_x = (target_size[0] - branding_width) // 2
+                      
+                      # Position branding text based on style
+                      if style == 'style4':
+                          # For Style 4, position below the title text with spacing
+                          padding_below_title = 50  # Increased padding below title for Style 4
+                          
+                          # Use golden box for branding URL instead of directly drawing text
+                          # Set font to a more appropriate one for a box display
+                          style4_branding_font_size = 40  # Good size for visibility in the box
+                          style4_branding_font_preferences = style4_font_preferences  # Use same font preferences as title
+                          style4_branding_font = load_bundled_font(style4_branding_font_preferences, style4_branding_font_size)
+                          
+                          try:
+                              # Make sure we have a draw object for the current image state
+                              draw = ImageDraw.Draw(img)
+                              
+                              # Calculate dimensions
+                              style4_branding_width = draw.textlength(branding_url, font=style4_branding_font)
+                              style4_bbox = draw.textbbox((0,0), branding_url, font=style4_branding_font)
+                              style4_text_height = style4_bbox[3] - style4_bbox[1]
+                              
+                              # Define golden box dimensions with padding
+                              box_padding_x = 60  # Horizontal padding (30px on each side)
+                              box_padding_y = 20  # Vertical padding (10px on top and bottom)
+                              box_width = style4_branding_width + box_padding_x
+                              box_height = style4_text_height + box_padding_y
+                              
+                              # Center box horizontally
+                              box_x = (target_size[0] - box_width) // 2
+                              
+                              # Position at bottom of image with more padding from title
+                              box_bottom_padding = 30  # Reduced padding from bottom to move box lower
+                              box_y = target_size[1] - box_bottom_padding - box_height
+                              
+                              # Golden color for the box (like in the image)
+                              gold_color = (230, 190, 60, 255)  # Bright gold color
+                              
+                              # Draw the box with slight rounding
+                              box_rect = [(box_x, box_y), (box_x + box_width, box_y + box_height)]
+                              draw.rounded_rectangle(box_rect, radius=5, fill=gold_color)
+                              
+                              # Calculate text position using bounding box for accurate centering
+                              box_center_x = box_x + (box_width / 2)
+                              box_center_y = box_y + (box_height / 2)
+                              
+                              # Calculate text position using bounding box for accurate centering
+                              style4_branding_x = int(box_center_x - (style4_branding_width / 2))
+                              
+                              # Adjust Y position based on bounding box for more accurate centering
+                              # This helps account for the text baseline which can make text appear off-center
+                              # First determine the text's baseline offset
+                              ascent = style4_text_height * 0.75  # Approximate ascent for most fonts
+                              
+                              # Position text with baseline correction to center it vertically
+                              style4_branding_y = int(box_center_y - (style4_text_height / 2))
+                              
+                              # Apply additional vertical adjustment to fix centering if needed
+                              vertical_adjustment = -5  # Adjust if text still appears too low
+                              style4_branding_y += vertical_adjustment
+                              
+                              logger.info(f"Box: x={box_x}, y={box_y}, w={box_width}, h={box_height}")
+                              logger.info(f"Box center: ({box_center_x}, {box_center_y})")
+                              logger.info(f"Text dimensions: w={style4_branding_width}, h={style4_text_height}")
+                              logger.info(f"Adjusted text pos: ({style4_branding_x}, {style4_branding_y})")
+                              
+                              # Draw text in black with precise positioning
+                              draw.text((style4_branding_x, style4_branding_y), 
+                                      branding_url, fill=(0, 0, 0, 255), font=style4_branding_font)
+                              
+                              # This approach bypasses the regular branding URL drawing code
+                              # Set a flag to prevent double-drawing
+                              style4_branding_done = True
+                              
+                          except Exception as e:
+                              logger.error(f"Error drawing Style 4 golden branding box: {e}")
+                              style4_branding_done = False
+                      elif style == 'style3':
+                          # For Style 3, position above the bottom black box (not inside it)
+                          bottom_bar_height = 180  # Must match the value from style3 implementation
+                          bottom_bar_top = target_size[1] - bottom_bar_height
+                          
+                          # Position button above the black box with some padding
+                          padding_above_box = 30  # Space between button and top of black box
+                          button_y = bottom_bar_top - button_height - padding_above_box
+                          
+                          # Use same font as title for branding URL
+                          branding_font_size = 50  # Increased size for better visibility
+                          branding_font_preferences = style3_font_preferences  # Use the same font preferences as the title
+                          branding_font = load_bundled_font(branding_font_preferences, branding_font_size)
+                          
+                          # Reset branding_x for Style 3 since it might be overwritten
+                          branding_x = None
+                          
+                          # Recalculate text dimensions with the new font
+                          try:
+                              branding_width = draw.textlength(branding_url, font=branding_font)
+                              bbox = draw.textbbox((0,0), branding_url, font=branding_font)
+                              text_height = bbox[3] - bbox[1]
+                              
+                              # Center text in the bottom bar both horizontally and vertically
+                              branding_x = (target_size[0] - branding_width) // 2
+                              # Calculate vertical center of the bottom bar
+                              bottom_bar_center_y = bottom_bar_top + (bottom_bar_height // 2)
+                              # Position text centered vertically in the bar
+                              branding_y = bottom_bar_center_y - (text_height // 2)
+                              
+                              logger.info(f"Style 3 branding URL will be drawn at x={branding_x}, y={branding_y}")
+                          except:
+                              logger.warning("Could not recalculate branding text dimensions")
+                              # Fallback positioning if calculation fails
+                              branding_x = (target_size[0] // 2)  # Center horizontally
+                              padding_from_bottom = 40
+                              branding_y = target_size[1] - padding_from_bottom - text_height
+                          
+                          # Use white text color to match the title
+                          branding_text_color = (255, 255, 255, 255)  # Full opacity white for better visibility
+                      elif style == 'style5':
+                          # For Style 5, position near the bottom of the curved dark section
+                          padding_from_bottom = 50  # Padding from bottom of the image
+                          branding_y = target_size[1] - padding_from_bottom - text_height
+                          
+                          # Use white text to match the title, slightly transparent
+                          branding_text_color = (255, 255, 255, 220)
+                      elif style == 'style2':
+                          # For Style 2, position in the bottom dark bar (similar to Style 1)
+                          bottom_bar_height = 60  # Must match the bottom bar height defined earlier
+                          padding_from_bottom = 12  # Adjusted from 15 to center better in the bar
+                          branding_y = target_size[1] - (bottom_bar_height / 2) - (text_height / 2)
+                          
+                          # Use light gold or white text for better contrast against the dark background
+                          branding_text_color = (255, 240, 180, 255)  # Light gold color
+                      elif style == 'style1':
+                          # For Style 1, position in the bottom dark bar
+                          bottom_bar_height = 60  # Must match the bottom bar height defined earlier
+                          padding_from_bottom = 12  # Adjusted from 15 to center better in the bar
+                          branding_y = target_size[1] - (bottom_bar_height / 2) - (text_height / 2)
+                          
+                          # Use gold text color to match the title
+                          branding_text_color = (215, 189, 69, 255)  # Gold color (#d7bd45)
+                      else:
+                          # Default positioning from bottom for other styles (fallback)
+                          padding_bottom = 30
+                          branding_y = target_size[1] - text_height - padding_bottom
+                          branding_text_color = (200, 200, 200)  # Light gray for other styles
+                      
+                      logger.debug(f"Branding text width={branding_width}, height={text_height}")
+                      logger.debug(f"Drawing branding at x={branding_x}, y={branding_y}")
+                      
+                      # Define shadow effects based on style
+                      if style == 'style1' or style == 'style2':
+                          # Stronger shadow for styles 1 and 2 that might need more contrast
+                          # Multi-layer shadow for better visibility in these styles
+                          shadow_layers = [
+                              ((3, 3), (0, 0, 0, 100)),
+                              ((2, 2), (0, 0, 0, 130)),
+                              ((1, 1), (0, 0, 0, 150))
+                          ]
+                          
+                          for offset, color in shadow_layers:
+                              draw.text((branding_x + offset[0], branding_y + offset[1]), 
+                                      branding_url, fill=color, font=branding_font)
+                      else:
+                          # Default shadow for other styles
+                          branding_shadow_color = (0, 0, 0, 100)
+                          branding_shadow_offset = (2, 2)  # Increased from (1,1) for better visibility
+                          draw.text((branding_x + branding_shadow_offset[0], branding_y + branding_shadow_offset[1]), 
+                                  branding_url, fill=branding_shadow_color, font=branding_font)
+                      
+                      # Draw main text
+                      logger.info(f"Drawing branding URL main text at x={branding_x}, y={branding_y}")
+                      draw.text((branding_x, branding_y), branding_url, fill=branding_text_color, font=branding_font)
+                      
+             except Exception as e:
+                  logger.error(f"Error drawing branding URL: {e}", exc_info=True)
+
+        # --- Add "Read More" button for Style 1 ---
+        if style == 'style1' or style == 'style2' or style == 'style3':
+            # Calculate button position - centered below title
+            read_more_text = "Read More"
+            button_font_size = 33  # Reduced from 32 to fit better in container
+            
+            # Set appropriate font based on style
+            if style == 'style1':
+                # Use the same font as the title for Style 1
+                button_font = load_bundled_font(['LeagueSpartan-Bold.ttf', 'Montserrat-Bold.ttf'], button_font_size)
+            elif style == 'style2':
+                # Use EBGaramond for Style 2 to match title
+                button_font = load_bundled_font(['EBGaramond-Bold.ttf', 'LeagueSpartan-Bold.ttf'], button_font_size)
+            else:  # style3
+                # Use the same font as Style 3 title
+                button_font = load_bundled_font(style3_font_preferences, button_font_size)
+            
+            try:
+                # Calculate button text dimensions
+                button_text_width = draw.textlength(read_more_text, font=button_font)
+                text_bbox = draw.textbbox((0, 0), read_more_text, font=button_font)
+                button_text_height = text_bbox[3] - text_bbox[1]
+                
+                # Create the button rectangle and shadow for a visual "button" effect
+                button_width = int(target_size[0] * 0.45)  # Increased width from 0.4 to 0.45
+                button_height = 70  # Increased height from 60 to 70
+                button_x = (target_size[0] - button_width) // 2  # Center horizontally
+                
+                # Position button vertically based on style
+                if style == 'style1':
+                    # Position button lower on the image for Style 1
+                    button_y = int(target_size[1] * 0.88)  # 88% down the image (changed from 80%)
+                elif style == 'style2':
+                    # Position button lower on the image for Style 2 too
+                    button_y = int(target_size[1] * 0.85)  # 85% down the image
+                else:  # style3
+                    # For Style 3, position above the bottom black box (not inside it)
+                    bottom_bar_height = 180  # Must match the value from style3 implementation
+                    bottom_bar_top = target_size[1] - bottom_bar_height
+                    
+                    # Position button above the black box with some padding
+                    padding_above_box = 30  # Space between button and top of black box
+                    button_y = bottom_bar_top - button_height - padding_above_box
+                
+                # Create button overlay
+                button_overlay = Image.new('RGBA', target_size, (0, 0, 0, 0))
+                button_draw = ImageDraw.Draw(button_overlay)
+                
+                # Draw button background with rounded corners
+                button_rect = [
+                    (button_x, button_y),
+                    (button_x + button_width, button_y + button_height)
+                ]
+                
+                # Draw button shadow
+                shadow_offset = 4
+                shadow_color = (0, 0, 0, 90)
+                shadow_rect = [
+                    (button_x + shadow_offset, button_y + shadow_offset),
+                    (button_x + button_width + shadow_offset, button_y + button_height + shadow_offset)
+                ]
+                button_draw.rounded_rectangle(shadow_rect, radius=25, fill=shadow_color)
+                
+                # Draw button background - adjust color based on style
+                if style == 'style1':
+                    button_color = (200, 200, 200, 240)  # Light gray with higher opacity
+                elif style == 'style2':
+                    button_color = (230, 220, 180, 240)  # Cream color that complements the gold
+                else:  # style3
+                    button_color = (220, 220, 220, 240)  # Light gray to contrast with the black box
+                
+                button_draw.rounded_rectangle(button_rect, radius=25, fill=button_color)
+                
+                # Overlay button on image
+                img = Image.alpha_composite(img, button_overlay)
+                draw = ImageDraw.Draw(img)
+                
+                # Draw button text - centered in button
+                text_x = button_x + (button_width - button_text_width) // 2
+                text_y = button_y + (button_height - button_text_height) // 2
+                
+                # Ensure perfect centering by applying a small adjustment if needed
+                # This addresses potential rounding issues with certain font renderings
+                text_x = int(text_x)
+                text_y = int(text_y)
+                
+                # Text color based on style
+                if style == 'style1':
+                    text_color = (80, 80, 80)  # Darker gray text
+                elif style == 'style2':
+                    text_color = (90, 80, 50)  # Dark gold/brown text
+                else:  # style3
+                    text_color = (50, 50, 50)  # Nearly black text for good contrast
+                
+                # Draw text
+                draw.text((text_x, text_y), read_more_text, fill=text_color, font=button_font)
+                
+            except Exception as e:
+                logger.error(f"Error drawing 'Read More' button or bottom bar: {e}", exc_info=True)
 
         # --- Final Touches ---
         # Apply professional shadow effect to the entire image for Style 2
@@ -914,12 +1281,55 @@ def generate_image():
             
             # Apply rounded corners to the entire image
             img = add_rounded_corners(img) # Apply corners LAST
+        elif style == 'style1':
+            # Style 1 final touches - add rounded corners for Pinterest suitability
+            img = img.convert("RGBA")
+            
+            # Apply more pronounced rounded corners - increased radius for Pinterest-style rounding
+            img = add_rounded_corners(img, radius=60)
+            
+            # Ensure proper conversion back to RGB for saving
+            img = img.convert("RGB")
         elif style == 'style3':
             # Style 3 final touches - add subtle gradient to the bars for dimension
             img = img.convert("RGBA")
             
             # Apply rounded corners to the entire image with larger radius for more pronounced corners
             img = add_rounded_corners(img, radius=60)  # Increased from 40 to 60 for more pronounced corners
+            
+            # --- Specific fix for Style 3 branding URL ---
+            if branding_url:
+                # Make sure we have a draw object for the current image state
+                draw = ImageDraw.Draw(img)
+                
+                # Use same font as title but larger for better visibility
+                style3_branding_font_size = 60  # Very large for visibility
+                style3_branding_font = load_bundled_font(style3_font_preferences, style3_branding_font_size)
+                
+                # Calculate dimensions
+                try:
+                    style3_branding_width = draw.textlength(branding_url, font=style3_branding_font)
+                    style3_bbox = draw.textbbox((0,0), branding_url, font=style3_branding_font)
+                    style3_text_height = style3_bbox[3] - style3_bbox[1]
+                    
+                    # Calculate position in bottom bar
+                    bottom_bar_height = 180  # Must match the value used earlier
+                    bottom_bar_top = target_size[1] - bottom_bar_height
+                    style3_branding_x = (target_size[0] - style3_branding_width) // 2
+                    style3_branding_y = bottom_bar_top + (bottom_bar_height - style3_text_height) // 2
+                    
+                    logger.info(f"STYLE 3 FIX: Drawing branding at x={style3_branding_x}, y={style3_branding_y}")
+                    
+                    # Add shadow for better visibility
+                    shadow_offset = 3
+                    draw.text((style3_branding_x + shadow_offset, style3_branding_y + shadow_offset), 
+                            branding_url, fill=(0, 0, 0, 150), font=style3_branding_font)
+                    
+                    # Draw the branding URL with full opacity white
+                    draw.text((style3_branding_x, style3_branding_y), 
+                            branding_url, fill=(255, 255, 255, 255), font=style3_branding_font)
+                except Exception as e:
+                    logger.error(f"Style 3 branding URL fix error: {e}")
             
             # Ensure proper conversion back to RGB for saving
             img = img.convert("RGB")
@@ -930,14 +1340,167 @@ def generate_image():
             # Apply rounded corners to the entire image
             img = add_rounded_corners(img, radius=30)  # More subtle corners for this style
             
+            # Add golden box for branding URL if present
+            if branding_url:
+                # Use the same font as the title for consistency
+                style4_branding_font_size = 40  # Good size for visibility in the box
+                style4_branding_font_preferences = style4_font_preferences  # Use same font preferences as title
+                style4_branding_font = load_bundled_font(style4_branding_font_preferences, style4_branding_font_size)
+                
+                try:
+                    # Make sure we have a draw object for the current image state
+                    draw = ImageDraw.Draw(img)
+                    
+                    # Calculate dimensions
+                    style4_branding_width = draw.textlength(branding_url, font=style4_branding_font)
+                    style4_bbox = draw.textbbox((0,0), branding_url, font=style4_branding_font)
+                    style4_text_height = style4_bbox[3] - style4_bbox[1]
+                    
+                    # Define golden box dimensions with padding
+                    box_padding_x = 60  # Horizontal padding (30px on each side)
+                    box_padding_y = 20  # Vertical padding (10px on top and bottom)
+                    box_width = style4_branding_width + box_padding_x
+                    box_height = style4_text_height + box_padding_y
+                    
+                    # Center box horizontally
+                    box_x = (target_size[0] - box_width) // 2
+                    
+                    # Position at bottom of image with more padding from title
+                    box_bottom_padding = 30  # Reduced padding from bottom to move box lower
+                    box_y = target_size[1] - box_bottom_padding - box_height
+                    
+                    # Golden color for the box (like in the image)
+                    gold_color = (230, 190, 60, 255)  # Bright gold color
+                    
+                    # Draw the box with slight rounding
+                    box_rect = [(box_x, box_y), (box_x + box_width, box_y + box_height)]
+                    draw.rounded_rectangle(box_rect, radius=5, fill=gold_color)
+                    
+                    # Calculate text position using bounding box for accurate centering
+                    box_center_x = box_x + (box_width / 2)
+                    box_center_y = box_y + (box_height / 2)
+                    
+                    # Calculate text position using bounding box for accurate centering
+                    style4_branding_x = int(box_center_x - (style4_branding_width / 2))
+                    
+                    # Adjust Y position based on bounding box for more accurate centering
+                    # This helps account for the text baseline which can make text appear off-center
+                    # First determine the text's baseline offset
+                    ascent = style4_text_height * 0.75  # Approximate ascent for most fonts
+                    
+                    # Position text with baseline correction to center it vertically
+                    style4_branding_y = int(box_center_y - (style4_text_height / 2))
+                    
+                    # Apply additional vertical adjustment to fix centering if needed
+                    vertical_adjustment = -5  # Adjust if text still appears too low
+                    style4_branding_y += vertical_adjustment
+                    
+                    logger.info(f"Box: x={box_x}, y={box_y}, w={box_width}, h={box_height}")
+                    logger.info(f"Box center: ({box_center_x}, {box_center_y})")
+                    logger.info(f"Text dimensions: w={style4_branding_width}, h={style4_text_height}")
+                    logger.info(f"Adjusted text pos: ({style4_branding_x}, {style4_branding_y})")
+                    
+                    # Draw text in black with precise positioning
+                    draw.text((style4_branding_x, style4_branding_y), 
+                            branding_url, fill=(0, 0, 0, 255), font=style4_branding_font)
+                    
+                    # This approach bypasses the regular branding URL drawing code
+                    # Set a flag to prevent double-drawing
+                    style4_branding_done = True
+                    
+                except Exception as e:
+                    logger.error(f"Error drawing Style 4 golden branding box: {e}")
+                    style4_branding_done = False
+            
             # Ensure proper conversion back to RGB for saving
             img = img.convert("RGB")
         elif style == 'style5':
-            # Style 5 final touches
+            # Style 5 final touches - add rounded corners for Pinterest suitability
             img = img.convert("RGBA")
             
             # Apply rounded corners to the entire image
             img = add_rounded_corners(img, radius=40)  # Medium rounded corners for this style
+            
+            # Add white box for branding URL if present
+            if branding_url:
+                # Use the same font as the title for consistency
+                style5_branding_font_size = 40  # Good size for visibility in the box
+                style5_branding_font_preferences = style5_font_preferences  # Use same font preferences as title
+                style5_branding_font = load_bundled_font(style5_branding_font_preferences, style5_branding_font_size)
+                
+                try:
+                    # Make sure we have a draw object for the current image state
+                    draw = ImageDraw.Draw(img)
+                    
+                    # Calculate dimensions
+                    style5_branding_width = draw.textlength(branding_url, font=style5_branding_font)
+                    style5_bbox = draw.textbbox((0,0), branding_url, font=style5_branding_font)
+                    style5_text_height = style5_bbox[3] - style5_bbox[1]
+                    
+                    # Define white box dimensions with padding
+                    box_padding_x = 60  # Horizontal padding (30px on each side)
+                    box_padding_y = 20  # Vertical padding (10px on top and bottom)
+                    box_width = style5_branding_width + box_padding_x
+                    box_height = style5_text_height + box_padding_y
+                    
+                    # Center box horizontally
+                    box_x = (target_size[0] - box_width) // 2
+                    
+                    # Position at bottom of image with padding - adjust for style5 curved section
+                    box_bottom_padding = 40  # Padding from bottom of image
+                    box_y = target_size[1] - box_bottom_padding - box_height
+                    
+                    # White color for the box with slight transparency for style
+                    white_color = (255, 255, 255, 245)  # Almost fully opaque white
+                    
+                    # Draw the box with slight rounding
+                    box_rect = [(box_x, box_y), (box_x + box_width, box_y + box_height)]
+                    draw.rounded_rectangle(box_rect, radius=8, fill=white_color)
+                    
+                    # Calculate text position using bounding box for accurate centering
+                    box_center_x = box_x + (box_width / 2)
+                    box_center_y = box_y + (box_height / 2)
+                    
+                    # Calculate text position using bounding box for accurate centering
+                    style5_branding_x = int(box_center_x - (style5_branding_width / 2))
+                    
+                    # Position text with baseline correction to center it vertically
+                    style5_branding_y = int(box_center_y - (style5_text_height / 2))
+                    
+                    # Apply additional vertical adjustment to fix centering if needed
+                    vertical_adjustment = -5  # Adjust if text still appears too low
+                    style5_branding_y += vertical_adjustment
+                    
+                    # Get more precise text measurements for perfect centering
+                    # Recalculate using textbbox for the specific text string
+                    text_bbox = draw.textbbox((0, 0), branding_url, font=style5_branding_font)
+                    precise_width = text_bbox[2] - text_bbox[0]
+                    precise_height = text_bbox[3] - text_bbox[1]
+                    
+                    # Calculate text position for perfect centering
+                    style5_branding_x = int(box_center_x - (precise_width / 2))
+                    
+                    # For perfect vertical centering, account for font metrics
+                    # The vertical adjustment is now positive to move text down from the top
+                    vertical_adjustment = 8  # Changed from -8 to +8 to move text down
+                    style5_branding_y = int(box_center_y - (precise_height / 2)) + vertical_adjustment
+                    
+                    logger.info(f"Style 5 box center at ({box_center_x}, {box_center_y})")
+                    logger.info(f"Branding text position at ({style5_branding_x}, {style5_branding_y})")
+                    
+                    # Draw text in black with precise positioning for perfect centering
+                    draw.text((style5_branding_x, style5_branding_y), 
+                            branding_url, fill=(0, 0, 0, 255), font=style5_branding_font)
+                    
+                    # This approach bypasses the regular branding URL drawing code
+                    # Set a flag to prevent double-drawing
+                    style5_branding_done = True
+                    
+                except Exception as e:
+                    logger.error(f"Error drawing Style 5 white branding box: {e}")
+                    style5_branding_done = False
+            else:
+                style5_branding_done = False
             
             # Ensure proper conversion back to RGB for saving
             img = img.convert("RGB")
