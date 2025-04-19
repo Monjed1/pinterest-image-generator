@@ -640,12 +640,75 @@ def generate_image():
         elif style == 'style4':
             # For Style 4, position text in the bottom rectangle
             # Position based on available space within the bottom rectangle
-            # bottom_rect_height = 450 # Already defined
+            bottom_rect_height = 450  # Must match the value defined earlier
             
-            # New calculation: Position near top of the dark rectangle + padding
-            top_padding_in_rect = 60 # Increase padding from top of rectangle
+            # Define font scale for style 4
+            style4_font_scale = 1.1  # Same scale used in the text drawing section
+            
+            # Calculate available space, reserving room for branding URL box
+            branding_box_height = 100  # Estimated height including padding
+            branding_box_margin = 50   # Space between title and branding box
+            
+            # Calculate available height for the title text
+            available_title_height = bottom_rect_height - branding_box_height - branding_box_margin
+            
+            # If title is very long, adjust font size
+            if len(wrapped_lines) > 3 or len(title) > 50:
+                # More aggressive font size reduction for long titles
+                # Base reduction on both line count and total character length
+                line_factor = max(0, len(wrapped_lines) - 3) 
+                length_factor = max(0, len(title) - 50) // 10  # Every 10 chars over 50
+                
+                # Combined reduction factor (larger of the two plus half of the smaller)
+                if line_factor > length_factor:
+                    font_reduction = line_factor * 8 + (length_factor * 4)
+                else:
+                    font_reduction = length_factor * 8 + (line_factor * 4)
+                
+                # Cap the reduction to avoid too small text
+                font_reduction = min(30, font_reduction)  # Maximum 30px reduction
+                
+                # Apply reduction and reload font
+                original_font_size = int(base_font_size * style4_font_scale)
+                new_font_size = max(40, original_font_size - font_reduction)  # Ensure minimum 40px size
+                
+                logger.info(f"Reducing Style 4 title font from {original_font_size}px to {new_font_size}px (reduction: {font_reduction}px)")
+                
+                style4_font = load_bundled_font(style4_font_preferences, new_font_size)
+                font = style4_font if style4_font else font
+                
+                # Rewrap text with the new font size
+                max_width = target_size[0] - 120
+                wrapped_lines = wrap_text(title, font, max_width)
+                
+                # Recalculate line heights with new font
+                line_heights = [draw.textbbox((0,0), line, font=font)[3] - draw.textbbox((0,0), line, font=font)[1] for line in wrapped_lines]
+                
+                # Use tighter line spacing for reduced font sizes
+                if font_reduction > 15:
+                    line_spacing_factor = 1.1  # Very tight spacing for heavily reduced fonts
+                else:
+                    line_spacing_factor = 1.2  # Somewhat reduced spacing
+            else:
+                line_spacing_factor = 1.3  # Normal spacing for shorter titles
+            
+            # Recalculate total text height with possibly updated line heights and spacing
+            total_text_height = sum(lh * line_spacing_factor for lh in line_heights) - (line_heights[0] * (line_spacing_factor - 1.2))
+            
+            # Top position - keep title in upper portion of the dark rectangle with padding
+            top_padding_in_rect = 40  # Padding from top of dark rectangle
             text_y = target_size[1] - bottom_rect_height + top_padding_in_rect
-            logger.debug(f"Style 4: Calculated text_y based on top alignment = {text_y}")
+            
+            # Make sure title doesn't extend into area reserved for branding URL
+            max_title_bottom = target_size[1] - branding_box_height - branding_box_margin
+            
+            # If title would overflow into branding area, adjust position upward
+            if text_y + total_text_height > max_title_bottom:
+                text_y = max_title_bottom - total_text_height
+                # Ensure minimum padding from top
+                text_y = max(target_size[1] - bottom_rect_height + 20, text_y)
+            
+            logger.debug(f"Style 4: Title height={total_text_height}, position y={text_y}, max bottom={max_title_bottom}")
         elif style == 'style5':
             # For Style 5, position title in the curved dark section
             # We want to center it vertically in the dark section, adjusting for the curve

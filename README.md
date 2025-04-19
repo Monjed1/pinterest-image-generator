@@ -1,13 +1,55 @@
 ﻿# Pinterest Image Generator
 
-A Flask-based web service that generates Pinterest-optimized images using the Runware AI API.
+A Flask-based web service that generates Pinterest-optimized images with beautiful text overlays and styling. Integrates with the Runware AI API for image generation.
 
 ## Features
 
-- Generate AI images using Runware API
-- Apply beautiful Pinterest-style templates with titles
-- Multiple design styles available
+- Generate AI images using Runware API integration
+- Five distinct Pinterest-optimized design styles:
+  - **Style 1**: Gold title text in a transparent black box with rounded corners, "Read More" button, and branding URL in a black footer bar
+  - **Style 2**: Elegant golden text with enhanced shadow effect, cream-colored "Read More" button, and branding URL in a dark footer
+  - **Style 3**: Clean white text on black bars with perfectly centered branding URL and "Read More" button above the footer
+  - **Style 4**: Gold-colored text in a dark bottom rectangle with golden box containing branding URL in black text
+  - **Style 5**: White text on dark curved background with branding URL in a white box with black text
+- Dynamic text sizing that automatically adjusts for longer titles
+- Perfect vertical and horizontal centering of text elements
+- Customizable branding URL in various style-specific formats
+- Rounded corners for Pinterest-friendly presentation
+- Modern "Read More" buttons with style-specific designs
 - Production-ready with robust error handling
+
+## Visual Styling Details
+
+### Style 1
+- Black transparent box for title with gold text (#d7bd45)
+- Light gray "Read More" button positioned at bottom
+- Branding URL in a black footer bar with custom font
+- Rounded corner image format
+
+### Style 2
+- Golden text with enhanced shadow for readability
+- Dark overlay for improved text visibility
+- Cream-colored "Read More" button
+- Branding URL in dark footer with light gold text
+- Shadow effect on the entire image
+
+### Style 3
+- Black bars at top and bottom
+- Clean white title text in the top bar
+- "Read More" button positioned above the bottom bar
+- Branding URL centered in the bottom bar
+
+### Style 4
+- Dark rectangle at bottom containing title
+- Golden title text with elegant font
+- Branding URL in a golden box with black text
+- Dynamic font sizing for long titles
+
+### Style 5
+- Dark curved section at the bottom
+- White bold text with shadow
+- Branding URL in a white box with black text
+- Perfect optical centering of text elements
 
 ## Setup
 
@@ -24,6 +66,56 @@ A Flask-based web service that generates Pinterest-optimized images using the Ru
    ```
    python app.py
    ```
+
+## Local Development
+
+For local development, you can run the server with:
+
+```
+python app.py
+```
+
+The server will start on port 5000 by default. You can access it at http://localhost:5000.
+
+## API Usage
+
+Generate an image by sending a POST request to `/generate-image` with the following JSON payload:
+
+```json
+{
+  "image_prompt": "Your AI image prompt",
+  "title": "Title to display on the image",
+  "BrandingURL": "Optional branding URL",
+  "Style": "style1"  // style1, style2, style3, style4, or style5
+}
+```
+
+The API will return a JSON response with the URL to the generated image:
+
+```json
+{
+  "image_url": "http://your-server/static/generated_image.png",
+  "status": "success"
+}
+```
+
+### Style Selection
+
+Choose from five available styles:
+- `style1`: Gold text in black transparent box with footer
+- `style2`: Golden text with shadow effects and footer
+- `style3`: White text on black bars (top and bottom)
+- `style4`: Gold text in dark rectangle with golden branding box
+- `style5`: White text on curved dark background with white branding box
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `image_prompt` | string | Yes | Prompt for AI image generation |
+| `title` | string | Yes | Title text to display on the image |
+| `BrandingURL` | string | No | URL or text to display in branding area |
+| `Style` | string | No | Image style (style1-5, defaults to style1) |
 
 ## VPS Deployment Guide
 
@@ -126,7 +218,23 @@ sudo chown -R your_user:your_user /path/to/your/app/static
 sudo chmod -R 755 /path/to/your/app/static
 ```
 
-### 5. Troubleshooting
+### 5. SSL Configuration with Certbot
+
+For HTTPS support, install Certbot and obtain SSL certificates:
+
+1. Install Certbot:
+   ```
+   sudo apt install certbot python3-certbot-nginx
+   ```
+
+2. Obtain a certificate:
+   ```
+   sudo certbot --nginx -d your-domain.com
+   ```
+
+3. Follow the prompts to complete the SSL setup
+
+### 6. Troubleshooting
 
 If images aren't being served:
 
@@ -155,24 +263,62 @@ If images aren't being served:
    FLASK_USE_TEMP_DIR=true
    ```
 
-## API Usage
+## Docker Deployment
 
-Generate an image by sending a POST request to `/generate-image` with the following JSON payload:
+### 1. Build the Docker image
 
-```json
-{
-  "image_prompt": "Your AI image prompt",
-  "title": "Title to display on the image",
-  "BrandingURL": "Optional branding URL",
-  "Style": "style1"  // style1, style2, style3, style4, or style5
-}
+```
+docker build -t pinterest-generator .
 ```
 
-The API will return a JSON response with the URL to the generated image:
+### 2. Run the container
 
-```json
-{
-  "image_url": "http://your-server/static/generated_image.png",
-  "status": "success"
-}
 ```
+docker run -d -p 5000:5000 --name pinterest-app --env-file .env pinterest-generator
+```
+
+### 3. Docker Compose (alternative)
+
+Create a `docker-compose.yml` file:
+
+```yaml
+version: '3'
+services:
+  pinterest-app:
+    build: .
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    volumes:
+      - ./static:/app/static
+    restart: always
+```
+
+Run with:
+```
+docker-compose up -d
+```
+
+## Font Customization
+
+The application uses several bundled fonts with fallbacks. You can customize the fonts by:
+
+1. Adding your own font files to the `font/` directory
+2. Modifying the font preferences arrays in the code:
+   - `main_font_preferences` for titles
+   - `branding_font_preferences` for branding URL
+   - Style-specific font preferences (style3_font_preferences, etc.)
+
+## Performance Optimization
+
+For high-traffic deployments:
+
+1. Configure a CDN for serving static images
+2. Use Redis for caching frequent image generation requests
+3. Implement a queue system for processing image requests
+
+## Credits
+
+- Uses [Runware AI API](https://runware.ai/) for image generation
+- Built with Flask, Pillow, and other open-source libraries
